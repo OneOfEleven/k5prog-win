@@ -2703,18 +2703,26 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	if (m_loadfile_data.size() > UVK5_FLASH_SIZE)
 	{
-		Application->BringToFront();
-		Application->NormalizeTopMosts();
-		const int res = Application->MessageBox("File runs into bootloader area, continue ?", Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
-		Application->RestoreTopMosts();
-		switch (res)
-		{
-			case IDYES:
-				break;
-			case IDNO:
-			case IDCANCEL:
-				return;
-		}
+		#if 0
+			Application->BringToFront();
+			Application->NormalizeTopMosts();
+			const int res = Application->MessageBox("File runs into bootloader area, continue ?", Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
+			Application->RestoreTopMosts();
+			switch (res)
+			{
+				case IDYES:
+					break;
+				case IDNO:
+				case IDCANCEL:
+					return;
+			}
+		#else
+			Application->BringToFront();
+			Application->NormalizeTopMosts();
+			Application->MessageBox("File runs into bootloader area. Upload currently prevented.", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+			Application->RestoreTopMosts();
+			return;
+		#endif
 	}
 
 	if (m_verbose > 2)
