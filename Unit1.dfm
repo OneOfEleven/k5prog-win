@@ -190,6 +190,7 @@ object Form1: TForm1
       Top = 50
       Width = 109
       Height = 25
+      Cursor = crHandPoint
       Hint = 'Load and write the EEPROM'
       Caption = 'Write EEPROM'
       ParentShowHint = False
@@ -217,6 +218,7 @@ object Form1: TForm1
     Top = 172
   end
   object Timer1: TTimer
+    Enabled = False
     Interval = 100
     OnTimer = Timer1Timer
     Left = 240
