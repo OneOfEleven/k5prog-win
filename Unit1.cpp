@@ -1287,7 +1287,7 @@ void __fastcall TForm1::threadProcess()
 			break;	// not yet received the complete packet
 
 		if (m_serial.rx_buffer[packet_len - 2] != 0xDC || m_serial.rx_buffer[packet_len - 1] != 0xBA)
-		{	// slide the data down one byte
+		{	// invalid end bytes - slide the data down one byte
 			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
 			m_serial.rx_buffer_wr--;
 			continue;
@@ -1296,7 +1296,9 @@ void __fastcall TForm1::threadProcess()
 		// appear to have a complete packet
 
 		if (data_len > 0)
-		{
+		{	// save the RX'ed packet
+
+			// copy/extract the packets payload into a separate buffer
 			std::vector <uint8_t> rx_data(data_len + 2);
 			memcpy(&rx_data[0], &m_serial.rx_buffer[4], data_len + 2);
 
@@ -1316,18 +1318,18 @@ void __fastcall TForm1::threadProcess()
 				}
 			#endif
 
-			// CRC bytes before de-obfuscate
+			// CRC bytes before de-obfuscation
 			const uint16_t crc0 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
 
-			// descramble the payload (the data and CRC)
+			// de-obfuscate (de-scramble) the payload (the data and 16-bit CRC are the scrambled bytes)
 			xor_payload(&rx_data[0], rx_data.size());
 
-			// CRC bytes after de-obfuscate
+			// CRC bytes after de-obfuscation
 			const uint16_t crc1 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
 
 			#if 1
 				if (m_thread->Sync && m_verbose > 2)
-				{	// show the descrambled payload
+				{	// show the de-scrambled payload
 					String s;
 					s.printf("rx [%3u]             ", m_rx_packet_queue.size());
 					for (size_t i = 0; i < rx_data.size(); i++)
@@ -1345,18 +1347,17 @@ void __fastcall TForm1::threadProcess()
 			{	// compute and check the CRC
 				const uint16_t crc2 = crc16xmodem(&rx_data[0], rx_data.size() - 2);
 				if (crc2 != crc1)
-					rx_data.resize(0);	// CRC error, dump the payload
+					rx_data.resize(0);	// CRC error .. dump the payload
 			}
 
 			if (!rx_data.empty())
 			{	// we have a payload to save
 
-				// drop the 16-bit CRC
+				// drop the 16-bit CRC off the end
 				rx_data.resize(data_len);
 
-				// append the rx'ed packet onto the rx queue
-				//CCriticalSection cs(m_thread_cs);
-				if (m_rx_packet_queue.size() < 4)
+				// append the RX'ed payload onto the RX queue
+				if (m_rx_packet_queue.size() < 4)    // don't bother saving any more than 4 packets/payloads, the radios bootloader sends continuously when in firmware update mode
 					m_rx_packet_queue.push_back(rx_data);
 			}
 		}
@@ -1365,6 +1366,8 @@ void __fastcall TForm1::threadProcess()
 		if (packet_len < (int)m_serial.rx_buffer_wr)
 			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[packet_len], m_serial.rx_buffer_wr - packet_len);
 		m_serial.rx_buffer_wr -= packet_len;
+
+//		break;       // only extract one packet per thread loop - gives more time to the exec
 	}
 
 	// *********
@@ -2435,7 +2438,7 @@ int __fastcall TForm1::k5_prepare(const int retry)
 			hdump(rx_data, rx_data_size);
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
-		{	// radio is in firmware mode
+		{	// radio is in firmware update mode
 			return -1;
 		}
 
@@ -2521,7 +2524,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	{
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("error: radio is in firmware mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		return;
 	}
 	if (r == 0)
@@ -2767,7 +2770,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	{
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("error: radio is not in firmware mode - turn the radio off, then back on whilst pressing the PTT");
+		Memo1->Lines->Add("error: radio is not in firmware update mode - turn the radio off, then back on whilst pressing the PTT");
 		return;
 	}
 
@@ -2923,7 +2926,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	{
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("error: radio is in firmware mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		return;
 	}
 	if (r == 0)
