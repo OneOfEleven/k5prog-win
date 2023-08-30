@@ -1258,13 +1258,25 @@ void __fastcall TForm1::threadProcess()
 	if (m_serial.rx_buffer_wr > 0 && m_serial.rx_timer.millisecs() >= 5000)
 		m_serial.rx_buffer_wr = 0;		// no data rx'ed fro 2 seconds .. empty the rx buffer
 
-	while (m_serial.rx_buffer_wr >= 8)
+	while (m_serial.rx_buffer_wr >= 4)   // '4' is the very minimum packet size
 	{
-		// scan for the start of a packet
 		if (m_serial.rx_buffer[0] != 0xAB || m_serial.rx_buffer[1] != 0xCD || m_serial.rx_buffer[2] == 0 || m_serial.rx_buffer[3] != 0x00)
-		{	// slide the data down one byte
-			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
-			m_serial.rx_buffer_wr--;
+		{
+			// scan for the start byte
+			int i = 1;
+			while (m_serial.rx_buffer[i] != 0xAB && i < m_serial.rx_buffer_wr)
+				i++;
+
+			if (i < m_serial.rx_buffer_wr)
+			{	// possible start byte found - remove everything before it
+				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[i], m_serial.rx_buffer_wr - i);
+				m_serial.rx_buffer_wr -= i;
+			}
+			else
+			{	// no start byte found
+				m_serial.rx_buffer_wr = 0;
+			}
+
 			continue;
 		}
 
