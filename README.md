@@ -1,6 +1,8 @@
 # k5prog-win
 A windows GUI version of k5prog.
 
+Use at your own risk !
+
 Original k5prog is https://github.com/sq5bpf/k5prog by Jacek.
 
 It just basically allows you to save and restore the K5/K6's configuration (EEPRPM area) and also to reprogram the CPU's flash area with new firmware.
