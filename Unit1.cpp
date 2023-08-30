@@ -2592,7 +2592,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	SaveDialog1->Title = "Select EEPROM filename to save too";
+	SaveDialog1->Title = "Select a filename to save EEPROM too";
 	const bool ok = SaveDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2618,7 +2618,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	OpenDialog1->Title = "Select a FIRMWARE file to load";
+	OpenDialog1->Title = "Select a FIRMWARE file to upload";
 	const bool ok = OpenDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2644,8 +2644,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	m_bootloader_ver = "";
 	m_firmware_ver   = "";
 
-	s.printf("Loaded %u bytes from '%s'", m_loadfile_data.size(), m_loadfile_name.c_str());
+	Memo1->Clear();
 	Memo1->Lines->Add("");
+
+	s.printf("Loaded %u (0x%04X) bytes (max 0x%04X) from '%s'", m_loadfile_data.size(), m_loadfile_data.size(), UVK5_FLASH_SIZE, m_loadfile_name.c_str());
 	Memo1->Lines->Add(s);
 
 	if (m_loadfile_data.size() < 1000)
@@ -2662,14 +2664,19 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	const uint16_t crc1 = crc16xmodem(&m_loadfile_data[0], m_loadfile_data.size() - 2);
 	const uint16_t crc2 = ((uint16_t)m_loadfile_data[m_loadfile_data.size() - 1] << 8) | ((uint16_t)m_loadfile_data[m_loadfile_data.size() - 2] << 0);
 
-	if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x13 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
-		encrypted = false;
-	else
-	if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x11 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
-		encrypted = false;
-	else
-	if (m_loadfile_data[0] == 0xF0 && m_loadfile_data[1] == 0x3F && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
-		encrypted = false;
+	#if 0
+		if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x13 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+			encrypted = false;
+		else
+		if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x11 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+			encrypted = false;
+		else
+		if (m_loadfile_data[0] == 0xF0 && m_loadfile_data[1] == 0x3F && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+			encrypted = false;
+	#else
+		if (m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+			encrypted = false;
+	#endif
 
 	if (encrypted && crc1 == crc2)
 	{	// the file appears to be encrypted
@@ -2680,14 +2687,19 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		// decrypt it
 		xor_firmware(&m_loadfile_data[0], m_loadfile_data.size());
 
-		if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x13 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
-			encrypted = false;
-		else
-		if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x11 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
-			encrypted = false;
-		else
-		if (m_loadfile_data[0] == 0xF0 && m_loadfile_data[1] == 0x3F && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
-			encrypted = false;
+		#if 0
+			if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x13 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+				encrypted = false;
+			else
+			if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x11 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+				encrypted = false;
+			else
+			if (m_loadfile_data[0] == 0xF0 && m_loadfile_data[1] == 0x3F && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+				encrypted = false;
+		#else
+			if (m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+				encrypted = false;
+		#endif
 
 		if (!encrypted && m_loadfile_data.size() >= (0x2000 + 16))
 		{	// extract and remove the 16-byte version string
@@ -2709,7 +2721,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	{
 		Application->BringToFront();
 		Application->NormalizeTopMosts();
-		Application->MessageBox("File appears to be encrypted", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+		Application->MessageBox("File doesn't appear to be valid for uploading", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
 		return;
 	}
@@ -2718,7 +2730,8 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	{
 		Application->BringToFront();
 		Application->NormalizeTopMosts();
-		Application->MessageBox("File is to large to be a firmware file (max 65536)", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+		s.printf("File is to large to be a firmware file (max 0x%05X)", UVK5_MAX_FLASH_SIZE);
+		Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
 		return;
 	}
@@ -2728,7 +2741,8 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		#if 0
 			Application->BringToFront();
 			Application->NormalizeTopMosts();
-			const int res = Application->MessageBox("File runs into bootloader area, continue ?", Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
+			s.printf("File runs into bootloader area (0x%04X)\n\nStill upload ?", UVK5_FLASH_SIZE);
+			const int res = Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
 			Application->RestoreTopMosts();
 			switch (res)
 			{
@@ -2741,7 +2755,8 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		#else
 			Application->BringToFront();
 			Application->NormalizeTopMosts();
-			Application->MessageBox("File runs into bootloader area. Upload currently prevented.", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+			s.printf("File runs into bootloader area (0x%04X)\n\nUpload cancelled", UVK5_FLASH_SIZE);
+			Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 			Application->RestoreTopMosts();
 			return;
 		#endif
@@ -2775,7 +2790,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	}
 
 	// overcome version problems
-	// the radios bootloader can refuse the chosen firmware version, so fool the booloader if so
+	// the radios bootloader can refuse the chosen firmware version, so fool the booloader
 	if (m_firmware_ver.Length() >= 3 && m_bootloader_ver.Length() >= 3)
 		if (m_firmware_ver[1] > m_bootloader_ver[1])
 			m_firmware_ver[1] = '*';
@@ -2851,7 +2866,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	OpenDialog1->Title = "Select an EEPROM file to load";
+	OpenDialog1->Title = "Select an EEPROM file to upload";
 	const bool ok = OpenDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2890,25 +2905,36 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	{
 		Application->BringToFront();
 		Application->NormalizeTopMosts();
-		Application->MessageBox("File is to large to be an eeprom file", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+		s.printf("File is to large to be an eeprom file (max 0x%04X)", UVK5_MAX_EEPROM_SIZE);
+		Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
 		return;
 	}
 
 	if (m_loadfile_data.size() > UVK5_EEPROM_SIZE)
 	{
-		Application->BringToFront();
-		Application->NormalizeTopMosts();
-		const int res = Application->MessageBox("File is larger than normal, continue ?", Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
-		Application->RestoreTopMosts();
-		switch (res)
-		{
-			case IDYES:
-				break;
-			case IDNO:
-			case IDCANCEL:
-				return;
-		}
+		#if 1
+			Application->BringToFront();
+			Application->NormalizeTopMosts();
+			s.printf("File is larger than normal (0x%04X)\n\nStill upload ?", UVK5_EEPROM_SIZE);
+			const int res = Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
+			Application->RestoreTopMosts();
+			switch (res)
+			{
+				case IDYES:
+					break;
+				case IDNO:
+				case IDCANCEL:
+					return;
+			}
+		#else
+			Application->BringToFront();
+			Application->NormalizeTopMosts();
+			s.printf("File is to large to be an eeprom file (max 0x%04X)\n\nUpload cancelled", UVK5_EEPROM_SIZE);
+			Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
+			Application->RestoreTopMosts();
+			return;
+		#endif
 	}
 
 	if (!connect())
