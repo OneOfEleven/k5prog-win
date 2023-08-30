@@ -28,14 +28,14 @@
     <SYSDEFINES value="NO_STRICT"/>
     <MAINSOURCE value="k5prog_win.cpp"/>
     <INCLUDEPATH value="$(BCB)\include;$(BCB)\include\vcl"/>
-    <LIBPATH value="$(BCB)\lib\obj;$(BCB)\lib;&quot;zlib-1.2.13&quot;"/>
+    <LIBPATH value="$(BCB)\lib\obj;$(BCB)\lib"/>
     <WARNINGS value="-w-par"/>
     <OTHERFILES value=""/>
   </MACROS>
   <OPTIONS>
     <IDLCFLAGS value="-I$(BCB)\include -I$(BCB)\include\vcl -src_suffix cpp -boa"/>
     <CFLAG1 value="-O2 -Vx -Ve -ff -X- -a8 -6 -b- -k- -vi -c -tW -tWM"/>
-    <PFLAGS value="-$Y- -$U -$R -$Q -$L- -$D- -$A8 -v -JPHNE -M"/>
+    <PFLAGS value="-$Y- -$U -$L- -$I- -$D- -$A8 -v -JPHNE -M"/>
     <RFLAGS value=""/>
     <AFLAGS value="/mx /w2 /zn"/>
     <LFLAGS value="-D&quot;&quot; -aa -Tpe -x -Gn"/>
@@ -62,7 +62,7 @@ IncludeVerInfo=1
 AutoIncBuild=0
 MajorVer=0
 MinorVer=1
-Release=0
+Release=1
 Build=0
 Debug=1
 PreRelease=0
@@ -75,7 +75,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=
 FileDescription=
-FileVersion=0.1.0.0
+FileVersion=0.1.1.0
 InternalName=
 LegalCopyright=
 LegalTrademarks=
@@ -96,13 +96,13 @@ Item3=$(BCB)\include;$(BCB)\include\vcl;.\lzham_codec\include;.\lz4-dev\lz4-dev\
 Item4=C:\Program Files (x86)\Borland\CBuilder6\Projects;C:\Projects\AD8232_Heart_Rate_Monitor\mine\windows;$(BCB)\include;$(BCB)\include\vcl
 
 [HistoryLists\hlLibraryPath]
-Count=0
+Count=2
+Item0=$(BCB)\lib\obj;$(BCB)\lib
+Item1=$(BCB)\lib\obj;$(BCB)\lib;zlib-1.2.13
 
 [HistoryLists\hlDebugSourcePath]
-Count=0
-
-[HistoryLists\hlConditionals]
-Count=0
+Count=1
+Item0=$(BCB)\source\vcl
 
 [Debugging]
 DebugSourceDirs=$(BCB)\source\vcl

@@ -955,13 +955,9 @@ void __fastcall TForm1::WMInitGUI(TMessage &msg)
 	if (Application->MainForm)
 		Application->MainForm->Update();
 
-//	HANDLE ble_service = openBleService();
+	Timer1->Enabled = true;
 
-//	Timer1->Enabled = true;
-
-	// TEST ONLY
-//	processConfigString("[ECG_TYPE3,v2023.06.12.10.30,500Hz,12bit,570,3328mV,int_bin,20,1,1,0,0,0,0,0]");
-
+	// test only
 //	::PostMessage(this->Handle, WM_CONNECT, 0, 0);
 }
 
@@ -1106,6 +1102,7 @@ void __fastcall TForm1::clearRxPacketQueue()
 
 void __fastcall TForm1::disconnect()
 {
+	// terminate the thread
 	if (m_thread != NULL)
 	{
 		if (!m_thread->FreeOnTerminate)
@@ -1133,6 +1130,8 @@ void __fastcall TForm1::disconnect()
 
 	clearRxPacketQueue();
 
+	m_serial.rx_buffer_wr = 0;
+
 	SerialPortComboBox->Enabled  = true;
 	SerialSpeedComboBox->Enabled = true;
 }
@@ -1152,14 +1151,17 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 		Memo1->Update();
 	}
 
-	const int i = SerialPortComboBox->ItemIndex;
+	int i = SerialPortComboBox->ItemIndex;
 	if (i <= 0)
 		return false;
 	port_name = SerialPortComboBox->Items->Strings[i].Trim();
 	if (port_name.IsEmpty() || port_name.LowerCase() == "none")
 		return false;
 
-	int baudrate = (int)SerialSpeedComboBox->Items->Objects[SerialSpeedComboBox->ItemIndex];
+	i = SerialSpeedComboBox->ItemIndex;
+	if (i < 0)
+		return false;
+	const int baudrate = (int)SerialSpeedComboBox->Items->Objects[i];
 	if (baudrate <= 0)
 	{	// error
 		Memo1->Lines->Add("error: serial baudrate: [" + IntToStr(baudrate) + "]");
@@ -1185,6 +1187,8 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 
 	s.printf("'%s' opened at %d Baud", m_serial.port_name.c_str(), baudrate);
 	Memo1->Lines->Add(s);
+
+	clearRxPacketQueue();
 
 	m_serial.rx_buffer_wr = 0;
 	m_serial.rx_timer.mark();
@@ -1505,6 +1509,7 @@ void __fastcall TForm1::ClearButtonClick(TObject *Sender)
 
 #if 0
 
+	// slow bit-bang
 	uint16_t __fastcall TForm1::crc16xmodem(const uint8_t *data, const int size)
 	{
 		uint16_t crc = 0;
@@ -1522,6 +1527,7 @@ void __fastcall TForm1::ClearButtonClick(TObject *Sender)
 
 #else
 
+	// fast table based
 	uint16_t __fastcall TForm1::crc16xmodem(const uint8_t *data, const int size)
 	{
 		uint16_t crc = 0;
@@ -1668,7 +1674,8 @@ void __fastcall TForm1::hex_dump(const struct k5_command *cmd, const bool tx)
 	if (cmd->cmd != NULL)
 	{
 		s.printf("%s clear      [%3d]             ", tx ? "tx" : "rx", cmd->len);
-		for (int i = 0; i < (cmd->len + 2); i++)
+		//for (int i = 0; i < cmd->len; i++)
+		for (int i = 0; i < (cmd->len + 2); i++)   // also show the 2 CRC bytes
 		{
 			String s2;
 			s2.printf("%02X ", cmd->cmd[i]);
