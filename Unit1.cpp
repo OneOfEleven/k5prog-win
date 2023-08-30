@@ -2549,7 +2549,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	{
 		if (m_verbose > 0)
 		{
-			s.printf("read ERPROM  %04X  len %3d  %3d%%", i, block_len, (100 * (i + block_len)) / size);
+			s.printf("read EEPROM  %04X  len %3d  %3d%%", i, block_len, (100 * (i + block_len)) / size);
 			Memo1->Lines->Add(s);
 			Memo1->Update();
 		}
