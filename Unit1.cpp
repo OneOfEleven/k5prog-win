@@ -2541,6 +2541,10 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	const int size      = sizeof(eeprom);
 	const int block_len = UVK5_EEPROM_BLOCKSIZE;
 
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
+
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
 	CGauge1->Update();
@@ -2561,16 +2565,21 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 			s.printf("error: k5_read_eeprom() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
+			SerialPortComboBoxChange(NULL);
 			disconnect();
 			return;
 		}
 
 		CGauge1->Progress = i + block_len;
 		CGauge1->Update();
+
+		Application->ProcessMessages();
 	}
 
 	Memo1->Lines->Add("read EEPROM complete");
 	Memo1->Lines->Add("");
+
+	SerialPortComboBoxChange(NULL);
 
 	m_verbose = verbose;
 
@@ -2820,6 +2829,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	if (m_verbose > 1)
 		m_verbose = 1;
 
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
+
 	CGauge1->MaxValue = m_loadfile_data.size();
 	CGauge1->Progress = 0;
 	CGauge1->Update();
@@ -2843,6 +2856,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			s.printf("error: k5_write_flash() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
+			SerialPortComboBoxChange(NULL);
 			m_verbose = verbose;
 			disconnect();
 			return;
@@ -2850,10 +2864,14 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 		CGauge1->Progress = i + len;
 		CGauge1->Update();
+
+		Application->ProcessMessages();
 	}
 
 	Memo1->Lines->Add("write FLASH complete");
 	Memo1->Update();
+
+	SerialPortComboBoxChange(NULL);
 
 	m_verbose = verbose;
 
@@ -2992,6 +3010,10 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	if (m_verbose > 1)
 		m_verbose = 1;
 
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
+
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
 	CGauge1->Update();
@@ -3020,6 +3042,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
 			Memo1->Update();
+			SerialPortComboBoxChange(NULL);
 			m_verbose = verbose;
 			disconnect();
 			return;
@@ -3027,10 +3050,14 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 		CGauge1->Progress = i + len;
 		CGauge1->Update();
+
+		Application->ProcessMessages();
 	}
 
 	Memo1->Lines->Add("write EEPROM complete");
 	Memo1->Update();
+
+	SerialPortComboBoxChange(NULL);
 
 	m_verbose = verbose;
 
