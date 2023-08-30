@@ -1581,7 +1581,6 @@ void __fastcall TForm1::hdump(const uint8_t *buf, const int len)
 	String     s;
 	char       adump[75];
 	int        tmp3 = 0;
-	uint8_t    sss;
 	const char hexz[] = "0123456789ABCDEF";
 	int        last_tmp = 0;
 
@@ -1598,39 +1597,42 @@ void __fastcall TForm1::hdump(const uint8_t *buf, const int len)
 	memset(adump, 0, sizeof(adump));
 	memset(adump, ' ', 74);
 
-	int tmp1;
-	for (tmp1 = 0; tmp1 < len; tmp1++)
+	int i;
+	int k;
+	for (i = 0, k = 0; i < len; i++, k++)
 	{
-		const int tmp2 = tmp1 % 16;
-		if (tmp2 == 0)
+		if (k >= 16)
+			 k = 0;
+		if (k == 0)
 		{
-			if (tmp1 != 0)
+			if (i != 0)
 			{
 				s.printf("%06X  %.65s", tmp3, adump);
 				Memo1->Lines->Add(s);
-				last_tmp = tmp1;
+				last_tmp = i;
 			}
 
 			memset(adump, 0, sizeof(adump));
 			memset(adump, ' ', 74);
 
-			tmp3 = tmp1;
+			tmp3 = i;
 		}
 
-		sss = buf[tmp1];
-		adump[(tmp2 * 3) + 0] = hexz[sss / 16];
-		adump[(tmp2 * 3) + 1] = hexz[sss % 16];
-		adump[tmp2 + 49] = isprint(sss) ? sss : '.';
+		const uint8_t b = buf[i];
+		int m = k * 3;
+		adump[m++] = hexz[b >> 4];
+		adump[m]   = hexz[b & 0x0f];
+		adump[((16 * 3) + 1) + k] = (b >= 32) ? b : '.';
 	}
 
 	#if 0
-		if ((tmp1 % 16) != 0 || len == 16)
+		if ((i % 16) != 0 || len == 16)
 		{
 			s.printf("%06X  %.65s", tmp3, adump);
 			Memo1->Lines->Add(s);
 		}
 	#else
-		if (last_tmp != tmp1)
+		if (last_tmp != i)
 		{
 			s.printf("%06X  %.65s", tmp3, adump);
 			Memo1->Lines->Add(s);
@@ -1651,14 +1653,12 @@ void __fastcall TForm1::k5_hexdump(const struct k5_command *cmd)
 
 	if (cmd->obfuscated_cmd != NULL)
 	{
-//		Memo1->Lines->Add("");
 		Memo1->Lines->Add("* obfuscated");
 		hdump(cmd->obfuscated_cmd, cmd->obfuscated_len);
 	}
 
 	if (cmd->cmd != NULL)
 	{
-//		Memo1->Lines->Add("");
 		Memo1->Lines->Add("* clear");
 		hdump(cmd->cmd, cmd->len);
 	}
@@ -2580,8 +2580,9 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	Memo1->Update();
 
 	if (m_verbose > 2)
-	{
+	{	// show the eeprom contents
 		Memo1->Lines->BeginUpdate();
+		Memo1->Lines->Add("");
 		hdump(&eeprom[0], size);
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
@@ -2674,7 +2675,11 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		if (m_loadfile_data[0] == 0xF0 && m_loadfile_data[1] == 0x3F && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
 			encrypted = false;
 	#else
-		if (m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+		if (m_loadfile_data[ 2] == 0x00 &&
+			 m_loadfile_data[ 3] == 0x20 &&
+			 m_loadfile_data[ 6] == 0x00 &&
+			 m_loadfile_data[10] == 0x00 &&
+			 m_loadfile_data[14] == 0x00)
 			encrypted = false;
 	#endif
 
@@ -2697,7 +2702,11 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			if (m_loadfile_data[0] == 0xF0 && m_loadfile_data[1] == 0x3F && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
 				encrypted = false;
 		#else
-			if (m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
+			if (m_loadfile_data[ 2] == 0x00 &&
+				 m_loadfile_data[ 3] == 0x20 &&
+				 m_loadfile_data[ 6] == 0x00 &&
+				 m_loadfile_data[10] == 0x00 &&
+				 m_loadfile_data[14] == 0x00)
 				encrypted = false;
 		#endif
 
@@ -2713,7 +2722,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 			m_firmware_ver = String(firmware_ver);
 
-			Memo1->Lines->Add("decrypted version '" + m_firmware_ver + "'");
+			Memo1->Lines->Add("firmware file version '" + m_firmware_ver + "'");
 		}
 	}
 
@@ -2763,8 +2772,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	}
 
 	if (m_verbose > 2)
-	{
+	{	// show the files contents - takes a short while to display
 		Memo1->Lines->BeginUpdate();
+		Memo1->Lines->Add("");
 		hdump(&m_loadfile_data[0], m_loadfile_data.size());
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
@@ -2962,8 +2972,9 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	}
 
 	if (m_verbose > 2)
-	{
+	{	//	show the files contents - takes a short while to display
 		Memo1->Lines->BeginUpdate();
+		Memo1->Lines->Add("");
 		hdump(&m_loadfile_data[0], m_loadfile_data.size());
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
