@@ -81,7 +81,7 @@ LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
-ProductVersion=1.0.0.0
+ProductVersion=0.1.0.0
 Comments=
 
 [Excluded Packages]
@@ -96,29 +96,13 @@ Item3=$(BCB)\include;$(BCB)\include\vcl;.\lzham_codec\include;.\lz4-dev\lz4-dev\
 Item4=C:\Program Files (x86)\Borland\CBuilder6\Projects;C:\Projects\AD8232_Heart_Rate_Monitor\mine\windows;$(BCB)\include;$(BCB)\include\vcl
 
 [HistoryLists\hlLibraryPath]
-Count=5
-Item0=$(BCB)\lib\obj;$(BCB)\lib;zlib-1.2.13
-Item1=zlib-1.2.13;$(BCB)\lib\obj;$(BCB)\lib
-Item2=$(BCB)\lib\obj;$(BCB)\lib
-Item3=$(BCB)\lib\obj;$(BCB)\lib;lz4-dev\lz4-dev\lib;lzham_codec\lzhamdecomp
-Item4=C:\Program Files (x86)\Borland\CBuilder6\Projects;C:\Projects\AD8232_Heart_Rate_Monitor\mine\windows;$(BCB)\lib\obj;$(BCB)\lib
+Count=0
 
 [HistoryLists\hlDebugSourcePath]
-Count=1
-Item0=$(BCB)\source\vcl
+Count=0
 
 [HistoryLists\hlConditionals]
-Count=10
-Item0=_DEBUG
-Item1=_DEBUG;BUILDFIXED
-Item2=_DEBUG;BUILDFIXED;SMALL_MEDIUM
-Item3=_DEBUG;STDC;BUILDFIXED
-Item4=_DEBUG;_WIN32;STDC;BUILDFIXED
-Item5=_DEBUG;_WINDOWS;_WIN32;STDC;BUILDFIXED
-Item6=_DEBUG;_WINDOWS;_WIN32;STDC
-Item7=_DEBUG;_WINDOWS;_WIN32
-Item8=_DEBUG;_WINDOWS;_WIN32;SMALL_MEDIUM
-Item9=_DEBUG;_WINDOWS
+Count=0
 
 [Debugging]
 DebugSourceDirs=$(BCB)\source\vcl
