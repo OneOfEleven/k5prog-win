@@ -64,7 +64,7 @@ typedef struct
 #define MODE_FLASH_DEBUG                     5            //
 #define MODE_FLASH                           6            //
 
-#define UVK5_HELLO_TRIES                     3            //
+#define UVK5_HELLO_TRIES                     2            //
 
 #define UVK5_EEPROM_SIZE                     0x00001d00   // 7424
 #define UVK5_MAX_EEPROM_SIZE                 0x00002000   // 8192    the radios calibration data is in 1D00 to 2000
@@ -2026,7 +2026,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
-	while ((GetTickCount() - tick) <= 3000)
+	while ((GetTickCount() - tick) <= 3000 && m_serial.port.connected)
 	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
@@ -2109,7 +2109,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
-	while ((GetTickCount() - tick) <= 2000)
+	while ((GetTickCount() - tick) <= 2000 && m_serial.port.connected)
 	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
@@ -2169,14 +2169,14 @@ int __fastcall TForm1::wait_flash_message()
 
 	if (m_verbose > 0)
 	{
-//		Memo1->Lines->Add("");
+		Memo1->Lines->Add("");
 		Memo1->Lines->Add("waiting for firmware update mode packet ..");
 		Memo1->Update();
 	}
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
-	while ((GetTickCount() - tick) <= 4000)
+	while ((GetTickCount() - tick) <= 3000 && m_serial.port.connected)
 	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
@@ -2196,24 +2196,19 @@ int __fastcall TForm1::wait_flash_message()
 			hdump(rx_data, rx_data_size);
 		}
 
-		if (rx_data_size < 36)
-		{
-			clearRxPacket0();		// remove spent packet
-			continue;
-		}
-
 		// expect to see ..
 		//  0x000000: 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
 		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		//  0x000020: 00 00 00 20                                       ...
 
-		if (rx_data[0] != 0x18 ||
-		    rx_data[1] != 0x05 ||
-		    rx_data[2] != 32 ||
-		    rx_data[3] != 0x00 ||
-		    rx_data[4] != 0x01 ||
-		    rx_data[5] != 0x02 ||
-		    rx_data[6] != 0x02)
+		if (rx_data_size < 36  ||
+			 rx_data[0] != 0x18 ||
+			 rx_data[1] != 0x05 ||
+			 rx_data[2] != 32   ||
+			 rx_data[3] != 0x00 ||
+			 rx_data[4] != 0x01 ||
+			 rx_data[5] != 0x02 ||
+			 rx_data[6] != 0x02)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2280,7 +2275,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
-	while ((GetTickCount() - tick) <= 2000)
+	while ((GetTickCount() - tick) <= 2000 && m_serial.port.connected)
 	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
@@ -2410,7 +2405,7 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
-	while ((GetTickCount() - tick) <= 3000)
+	while ((GetTickCount() - tick) <= 3000 && m_serial.port.connected)
 	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
@@ -2503,7 +2498,7 @@ int __fastcall TForm1::k5_hello()
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
-	while ((GetTickCount() - tick) <= 1000)
+	while ((GetTickCount() - tick) <= 1000 && m_serial.port.connected)
 	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
@@ -2897,23 +2892,38 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	WriteEEPROMButton->Enabled   = false;
 	WriteFirmwareButton->Enabled = false;
 
-	int r = 0;
-	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
-	{
-		r = k5_hello();
-		if (r != 0)
-			break;
-		Application->ProcessMessages();
-	}
-	Memo1->Lines->Add("");
-	if (r >= 0)
-	{
-		disconnect();
+	int r = wait_flash_message();
+	if (r <= 0)
+	{	// radio is either turned off or is not in firmware update mode
+
+		for (int i = 0; i < UVK5_HELLO_TRIES; i++)
+		{
+			r = k5_hello();
+			if (r != 0)
+				break;
+			Application->ProcessMessages();
+		}
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("error: radio is not in firmware update mode - turn the radio off, then back on whilst pressing the PTT");
-		SerialPortComboBoxChange(NULL);
-		return;
+		if (r > 0)
+		{
+			disconnect();
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("error: radio is not in firmware update mode - turn the radio off, then back on whilst pressing the PTT");
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
+		else
+		if (r == 0)
+		{
+			disconnect();
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("error: radio is not in firmware update mode - turn radio on whilst pressing the PTT");
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
 	}
+	else
+		Memo1->Lines->Add("");
 
 	// overcome version problems
 	// the radios bootloader can refuse the chosen firmware version, so fool the booloader
