@@ -764,6 +764,24 @@ void __fastcall TForm1::FormDestroy(TObject *Sender)
 
 void __fastcall TForm1::FormClose(TObject *Sender, TCloseAction &Action)
 {
+	if (m_thread != NULL)
+	{	// we are busy reading/writing from/to the radio
+
+		Application->BringToFront();
+		Application->NormalizeTopMosts();
+		const int res = Application->MessageBox("Busy readin/writing from/to the radio.\n\nStill close ?", Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
+		Application->RestoreTopMosts();
+		switch (res)
+		{
+			case IDYES:
+				break;
+			case IDNO:
+			case IDCANCEL:
+				Action = caNone;	// don't close this app'
+				return;
+		}
+	}
+
 	Timer1->Enabled = false;
 
 	disconnect();
@@ -2507,10 +2525,20 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	disconnect();
 
-	if (!connect())
+	// *******************************************
+	// download the radios configuration data
+
+	Memo1->Clear();
+	Memo1->Lines->Add("");
+
+	if (!connect(false))
 		return;
 
 	m_firmware_ver = "";
+
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 	for (int i = 0; i < UVK5_PREPARE_TRIES; i++)
@@ -2518,6 +2546,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		r = k5_prepare(i);
 		if (r != 0)
 			break;
+		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
 	if (r < 0)
@@ -2525,12 +2554,14 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		disconnect();
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		SerialPortComboBoxChange(NULL);
 		return;
 	}
 	if (r == 0)
 	{	// no valid reply
 		Memo1->Lines->Add("");
 		disconnect();
+		SerialPortComboBoxChange(NULL);
 		return;
 	}
 
@@ -2540,10 +2571,6 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	const int size      = sizeof(eeprom);
 	const int block_len = UVK5_EEPROM_BLOCKSIZE;
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
@@ -2565,8 +2592,8 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 			s.printf("error: k5_read_eeprom() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
-			SerialPortComboBoxChange(NULL);
 			disconnect();
+			SerialPortComboBoxChange(NULL);
 			return;
 		}
 
@@ -2579,14 +2606,17 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	Memo1->Lines->Add("read EEPROM complete");
 	Memo1->Lines->Add("");
 
-	SerialPortComboBoxChange(NULL);
-
 	m_verbose = verbose;
 
 	disconnect();
 
+	SerialPortComboBoxChange(NULL);
+
 	Memo1->Lines->Add("");
 	Memo1->Update();
+
+	// *******************************************
+	// save the radios configuration data
 
 	if (m_verbose > 2)
 	{	// show the eeprom contents
@@ -2597,8 +2627,6 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Update();
 	}
-
-	// *****************
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
@@ -2617,6 +2645,8 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	}
 
 	saveFile(name, &eeprom[0], size);
+
+	// *******************************************
 }
 
 void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
@@ -2625,6 +2655,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	uint8_t flash[UVK5_MAX_FLASH_SIZE];
 
 	disconnect();
+
+	// *******************************************
+	// load the firmware file in
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
@@ -2642,6 +2675,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		name += ext;
 	}
 
+	m_bootloader_ver = "";
+	m_firmware_ver   = "";
+
 	if (loadFile(name) == 0)
 	{
 		Application->BringToFront();
@@ -2650,9 +2686,6 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		Application->RestoreTopMosts();
 		return;
 	}
-
-	m_bootloader_ver = "";
-	m_firmware_ver   = "";
 
 	Memo1->Clear();
 	Memo1->Lines->Add("");
@@ -2789,8 +2822,15 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 	}
 
+	// *******************************************
+	// upload the firmware to the radio
+
 	if (!connect(false))
 		return;
+
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 	for (int i = 0; i < UVK5_PREPARE_TRIES; i++)
@@ -2798,6 +2838,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		r = k5_prepare(-1);
 		if (r != 0)
 			break;
+		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
 	if (r >= 0)
@@ -2805,21 +2846,25 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		disconnect();
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is not in firmware update mode - turn the radio off, then back on whilst pressing the PTT");
+		SerialPortComboBoxChange(NULL);
 		return;
 	}
 
 	// overcome version problems
 	// the radios bootloader can refuse the chosen firmware version, so fool the booloader
 	if (m_firmware_ver.Length() >= 3 && m_bootloader_ver.Length() >= 3)
-		if (m_firmware_ver[1] > m_bootloader_ver[1])
-			m_firmware_ver[1] = '*';
+		if (m_firmware_ver[1] != '*' && m_firmware_ver[2] == '.' && m_bootloader_ver[2] == '.')
+			if (m_firmware_ver[1] > m_bootloader_ver[1])
+				m_firmware_ver[1] = '*';
 
+	// tell the bootloader what the new firmwares version is
 	r = k5_send_flash_version_message(!m_firmware_ver.IsEmpty() ? m_firmware_ver.c_str() : "2.01.26");
 	if (r <= 0)
 	{
 		Memo1->Lines->Add("error: send firmware version");
 		Memo1->Lines->Add("");
 		disconnect();
+		SerialPortComboBoxChange(NULL);
 		return;
 	}
 
@@ -2828,10 +2873,6 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	const int verbose = m_verbose;
 	if (m_verbose > 1)
 		m_verbose = 1;
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	CGauge1->MaxValue = m_loadfile_data.size();
 	CGauge1->Progress = 0;
@@ -2856,9 +2897,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			s.printf("error: k5_write_flash() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
-			SerialPortComboBoxChange(NULL);
 			m_verbose = verbose;
 			disconnect();
+			SerialPortComboBoxChange(NULL);
 			return;
 		}
 
@@ -2881,7 +2922,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	Sleep(50);
 
 	Memo1->Lines->Add("");
+
 	disconnect();
+
+	// *******************************************
 }
 
 void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
@@ -2889,6 +2933,9 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	String s;
 
 	disconnect();
+
+	// *******************************************
+	// load the configuration file in
 
 	Memo1->Lines->Add("");
 
@@ -2916,6 +2963,9 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		Application->RestoreTopMosts();
 		return;
 	}
+
+	Memo1->Clear();
+	Memo1->Lines->Add("");
 
 	s.printf("Loaded %u bytes from '%s'", m_loadfile_data.size(), m_loadfile_name.c_str());
 	Memo1->Lines->Add(s);
@@ -2965,8 +3015,15 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		#endif
 	}
 
-	if (!connect())
+	// *******************************************
+	// upload the configuration data to the radio
+
+	if (!connect(false))
 		return;
+
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 	for (int i = 0; i < UVK5_PREPARE_TRIES; i++)
@@ -2974,6 +3031,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		r = k5_prepare(i);
 		if (r != 0)
 			break;
+		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
 	if (r < 0)
@@ -2981,11 +3039,13 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		disconnect();
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		SerialPortComboBoxChange(NULL);
 		return;
 	}
 	if (r == 0)
 	{
 		disconnect();
+		SerialPortComboBoxChange(NULL);
 		return;
 	}
 
@@ -3009,10 +3069,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	const int verbose = m_verbose;
 	if (m_verbose > 1)
 		m_verbose = 1;
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
