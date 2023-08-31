@@ -53,6 +53,9 @@
 
 #define SERIAL_OVERLAPPED
 
+#pragma option push
+#pragma warn -8027
+
 typedef struct
 {
 	char name[MAX_PATH];
@@ -98,7 +101,7 @@ private:
 	HANDLE			m_device_handle;
 
 	HANDLE			m_mutex;
-	
+
 	DWORD				m_last_error;
 	char				m_last_error_str[256];
 
@@ -237,6 +240,8 @@ public:
 	__property bool ring = {read = GetRING};
 	__property bool rlsd = {read = GetRLSD};
 };
+
+#pragma option pop
 
 #endif
 

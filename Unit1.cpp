@@ -1305,7 +1305,7 @@ void __fastcall TForm1::threadProcess()
 			const uint16_t crc0 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
 
 			// de-obfuscate (de-scramble) the payload (the data and 16-bit CRC are the scrambled bytes)
-			xor_payload(&rx_data[0], rx_data.size());
+			k5_xor_payload(&rx_data[0], rx_data.size());
 
 			// CRC bytes after de-obfuscation
 			const uint16_t crc1 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
@@ -1628,7 +1628,7 @@ void __fastcall TForm1::ClearButtonClick(TObject *Sender)
 
 // ************************************************************************
 
-void __fastcall TForm1::destroy_k5_struct(struct k5_command *cmd)
+void __fastcall TForm1::k5_destroy_struct(struct k5_command *cmd)
 {
 	if (cmd == NULL)
 		return;
@@ -1648,7 +1648,7 @@ void __fastcall TForm1::destroy_k5_struct(struct k5_command *cmd)
 	free(cmd);
 }
 
-void __fastcall TForm1::hdump(const uint8_t *buf, const int len)
+void __fastcall TForm1::k5_hdump(const uint8_t *buf, const int len)
 {
 	String     s;
 	char       adump[75];
@@ -1713,7 +1713,7 @@ void __fastcall TForm1::hdump(const uint8_t *buf, const int len)
 }
 
 // hexdump a k5_command struct
-void __fastcall TForm1::k5_hexdump(const struct k5_command *cmd)
+void __fastcall TForm1::k5_hex_dump(const struct k5_command *cmd)
 {
 	String s;
 
@@ -1726,17 +1726,17 @@ void __fastcall TForm1::k5_hexdump(const struct k5_command *cmd)
 	if (cmd->obfuscated_cmd != NULL)
 	{
 		Memo1->Lines->Add("* obfuscated");
-		hdump(cmd->obfuscated_cmd, cmd->obfuscated_len);
+		k5_hdump(cmd->obfuscated_cmd, cmd->obfuscated_len);
 	}
 
 	if (cmd->cmd != NULL)
 	{
 		Memo1->Lines->Add("* clear");
-		hdump(cmd->cmd, cmd->len);
+		k5_hdump(cmd->cmd, cmd->len);
 	}
 }
 
-void __fastcall TForm1::hex_dump(const struct k5_command *cmd, const bool tx)
+void __fastcall TForm1::k5_hex_dump2(const struct k5_command *cmd, const bool tx)
 {
 	String s;
 
@@ -1773,9 +1773,9 @@ void __fastcall TForm1::hex_dump(const struct k5_command *cmd, const bool tx)
 }
 
 // (de)obfuscate firmware data
-void __fastcall TForm1::xor_firmware(uint8_t *data, const int len)
+void __fastcall TForm1::k5_xor_firmware(uint8_t *data, const int len)
 {
-	const uint8_t k5_xor_pattern[] =
+	static const uint8_t xor_pattern[] =
 	{
 		0x47, 0x22, 0xc0, 0x52, 0x5d, 0x57, 0x48, 0x94, 0xb1, 0x60, 0x60, 0xdb, 0x6f, 0xe3, 0x4c, 0x7c,
 		0xd8, 0x4a, 0xd6, 0x8b, 0x30, 0xec, 0x25, 0xe0, 0x4c, 0xd9, 0x00, 0x7f, 0xbf, 0xe3, 0x54, 0x05,
@@ -1791,13 +1791,13 @@ void __fastcall TForm1::xor_firmware(uint8_t *data, const int len)
 		return;
 
 	for (int i = 0; i < len; i++)
-		data[i] ^= k5_xor_pattern[i % sizeof(k5_xor_pattern)];
+		data[i] ^= xor_pattern[i % sizeof(xor_pattern)];
 }
 
 // (de)obfuscate communications data
-void __fastcall TForm1::xor_payload(uint8_t *data, const int len)
+void __fastcall TForm1::k5_xor_payload(uint8_t *data, const int len)
 {
-	const uint8_t k5_xor_pattern[] =
+	static const uint8_t xor_pattern[] =
 	{
 		0x16, 0x6c, 0x14, 0xe6, 0x2e, 0x91, 0x0d, 0x40, 0x21, 0x35, 0xd5, 0x40, 0x13, 0x03, 0xe9, 0x80
 	};
@@ -1806,7 +1806,7 @@ void __fastcall TForm1::xor_payload(uint8_t *data, const int len)
 		return;
 
 	for (int i = 0; i < len; i++)
-		data[i] ^= k5_xor_pattern[i % sizeof(k5_xor_pattern)];
+		data[i] ^= xor_pattern[i % sizeof(xor_pattern)];
 }
 
 int __fastcall TForm1::k5_obfuscate(struct k5_command *cmd)
@@ -1840,7 +1840,7 @@ int __fastcall TForm1::k5_obfuscate(struct k5_command *cmd)
 	cmd->obfuscated_cmd[cmd->len + 4] = (c >> 0) & 0xff;
 	cmd->obfuscated_cmd[cmd->len + 5] = (c >> 8) & 0xff;
 
-	xor_payload(cmd->obfuscated_cmd + 4, cmd->len + 2);
+	k5_xor_payload(cmd->obfuscated_cmd + 4, cmd->len + 2);
 
 	cmd->obfuscated_cmd[cmd->len + 6] = 0xDC;
 	cmd->obfuscated_cmd[cmd->len + 7] = 0xBA;
@@ -1874,7 +1874,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("error: invalid header");
-			k5_hexdump(cmd);
+			k5_hex_dump(cmd);
 		}
 		return 0;
 	}
@@ -1884,7 +1884,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("error: invalid footer");
-			k5_hexdump(cmd);
+			k5_hex_dump(cmd);
 		}
 		return 0;
 	}
@@ -1900,7 +1900,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 	memcpy(cmd->cmd, cmd->obfuscated_cmd + 4, cmd->len);
 
 	// de-obfuscate
-	xor_payload(cmd->cmd, cmd->len);
+	k5_xor_payload(cmd->cmd, cmd->len);
 
 	if (m_verbose > 2)
 	{
@@ -1909,7 +1909,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 		Memo1->Lines->Add(s);
 		Memo1->Update();
 
-		hdump(cmd->cmd, cmd->len);
+		k5_hdump(cmd->cmd, cmd->len);
 	}
 
 	const uint16_t crc1 = crc16(cmd->cmd, cmd->len - 2);
@@ -1927,7 +1927,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 	if (crc2 == crc1)
 	{
 		Memo1->Lines->Add("* the protocol actually uses proper crc on datagrams from the radio, please inform the author of the radio/firmware version");
-		k5_hexdump(cmd);
+		k5_hex_dump(cmd);
 	}
 
 	cmd->crc_ok = 0;
@@ -1936,7 +1936,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 	{
 		s.printf("invalid crc   rx'ed 0x%04X   computed 0x%04X", crc2, crc1);
 		Memo1->Lines->Add(s);
-		k5_hexdump(cmd);
+		k5_hex_dump(cmd);
 	}
 
 	cmd->len -= 2;    // skip crc
@@ -1959,8 +1959,8 @@ int __fastcall TForm1::k5_send_cmd(struct k5_command *cmd)
 	}
 
 	if (m_verbose > 1)
-//		k5_hexdump(cmd);
-		hex_dump(cmd, true);
+//		k5_hex_dump(cmd);
+		k5_hex_dump2(cmd, true);
 
 	if (cmd->obfuscated_cmd != NULL && cmd->obfuscated_len > 0)
 		m_serial.port.TxBytes(cmd->obfuscated_cmd, cmd->obfuscated_len);
@@ -1986,7 +1986,7 @@ int __fastcall TForm1::k5_send_buf(const uint8_t *buf, const int len)
 
 	const int s_len = k5_send_cmd(cmd);
 
-	destroy_k5_struct(cmd);
+	k5_destroy_struct(cmd);
 
 	return s_len;
 }
@@ -2043,7 +2043,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size);
 		}
 
 		if (rx_data_size < (8 + len))
@@ -2126,7 +2126,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size);
 		}
 
 		if (rx_data_size < 6)
@@ -2136,9 +2136,9 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 		}
 
 		if (rx_data[0] != 0x1E ||
-		    rx_data[1] != 0x05 ||
+			 rx_data[1] != 0x05 ||
 			 rx_data[4] != buffer[4] ||
-		    rx_data[5] != buffer[5])
+			 rx_data[5] != buffer[5])
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2155,7 +2155,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 	return 0;
 }
 
-int __fastcall TForm1::wait_flash_message()
+int __fastcall TForm1::k5_wait_flash_message()
 {
 //	String s;
 
@@ -2193,7 +2193,7 @@ int __fastcall TForm1::wait_flash_message()
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size);
 		}
 
 		// expect to see ..
@@ -2292,7 +2292,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size);
 		}
 
 		if (rx_data_size < 36)
@@ -2307,12 +2307,12 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 		//  0x000020: 00 00 00 20                                       ...
 
 		if (rx_data[0] != 0x18 ||
-		    rx_data[1] != 0x05 ||
-		    rx_data[2] != 32 ||
-		    rx_data[3] != 0x00 ||
-		    rx_data[4] != 0x01 ||
-		    rx_data[5] != 0x02 ||
-		    rx_data[6] != 0x02)
+			 rx_data[1] != 0x05 ||
+			 rx_data[2] != 32 ||
+			 rx_data[3] != 0x00 ||
+			 rx_data[4] != 0x01 ||
+			 rx_data[5] != 0x02 ||
+			 rx_data[6] != 0x02)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2329,7 +2329,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 	return 0;
 }
 /*
-int __fastcall TForm1::k5_readflash(uint8_t *buf, const int len, const int offset)
+int __fastcall TForm1::k5_read_flash(uint8_t *buf, const int len, const int offset)
 {
 	String s;
 	uint8_t buffer[16];
@@ -2422,7 +2422,7 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size);
 		}
 
 		if (rx_data_size < 12)
@@ -2515,7 +2515,7 @@ int __fastcall TForm1::k5_hello()
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size);
 		}
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
@@ -2674,7 +2674,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	{	// show the eeprom contents
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
-		hdump(&eeprom[0], size);
+		k5_hdump(&eeprom[0], size);
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
 		Memo1->Update();
@@ -2785,7 +2785,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		m_loadfile_data.resize(m_loadfile_data.size() - 2);
 
 		// decrypt it
-		xor_firmware(&m_loadfile_data[0], m_loadfile_data.size());
+		k5_xor_firmware(&m_loadfile_data[0], m_loadfile_data.size());
 
 		#if 0
 			if (m_loadfile_data[0] == 0x88 && m_loadfile_data[1] == 0x13 && m_loadfile_data[2] == 0x00 && m_loadfile_data[3] == 0x20)
@@ -2871,7 +2871,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	{	// show the files contents - takes a short while to display
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
-		hdump(&m_loadfile_data[0], m_loadfile_data.size());
+		k5_hdump(&m_loadfile_data[0], m_loadfile_data.size());
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
 	}
@@ -2892,7 +2892,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	WriteEEPROMButton->Enabled   = false;
 	WriteFirmwareButton->Enabled = false;
 
-	int r = wait_flash_message();
+	int r = k5_wait_flash_message();
 	if (r <= 0)
 	{	// radio is either turned off or is not in firmware update mode
 
@@ -3128,18 +3128,18 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	{	//	show the files contents - takes a short while to display
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
-		hdump(&m_loadfile_data[0], m_loadfile_data.size());
+		k5_hdump(&m_loadfile_data[0], m_loadfile_data.size());
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
 	}
 
 	Memo1->Lines->Add("writing eeprom area ..");
 
-	int size = 0;
+//	int size = 0;
 //	while (uvk5_writes[size][1] > 0)
 //		size++;
 
-	size = m_loadfile_data.size();
+	int size = m_loadfile_data.size();
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;

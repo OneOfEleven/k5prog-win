@@ -58,6 +58,9 @@
 
 #define ARRAY_SIZE(array)    (sizeof(array) / sizeof(array[0]))
 
+#pragma option push
+#pragma warn -8027
+
 struct k5_command
 {
 	uint8_t *cmd;
@@ -148,7 +151,7 @@ class CThread : public TThread
 
 class TForm1 : public TForm
 {
-__published:	// IDE-managed Components
+__published:
 	TStatusBar *StatusBar1;
 	TOpenDialog *OpenDialog1;
 	TSaveDialog *SaveDialog1;
@@ -180,7 +183,7 @@ __published:	// IDE-managed Components
 	void __fastcall WriteEEPROMButtonClick(TObject *Sender);
 	void __fastcall SerialPortComboBoxChange(TObject *Sender);
 
-private:	// User declarations
+private:
 
 	String                m_ini_filename;
 
@@ -231,25 +234,24 @@ private:	// User declarations
 
 	std::vector <String> __fastcall stringSplit(String s, String param);
 
-	void __fastcall hex_dump(const struct k5_command *cmd, const bool tx);
-
 	void     __fastcall make_CRC16_table();
 	uint16_t __fastcall crc16(const uint8_t *data, const int size);
 
-	void __fastcall destroy_k5_struct(struct k5_command *cmd);
-	void __fastcall hdump(const uint8_t *buf, const int len);
-	void __fastcall k5_hexdump(const struct k5_command *cmd);
-	void __fastcall xor_firmware(uint8_t *data, const int len);
-	void __fastcall xor_payload(uint8_t *data, const int len);
+	void __fastcall k5_hex_dump2(const struct k5_command *cmd, const bool tx);
+	void __fastcall k5_destroy_struct(struct k5_command *cmd);
+	void __fastcall k5_hdump(const uint8_t *buf, const int len);
+	void __fastcall k5_hex_dump(const struct k5_command *cmd);
+	void __fastcall k5_xor_firmware(uint8_t *data, const int len);
+	void __fastcall k5_xor_payload(uint8_t *data, const int len);
 	int  __fastcall k5_obfuscate(struct k5_command *cmd);
 	int  __fastcall k5_deobfuscate(struct k5_command *cmd);
 	int  __fastcall k5_send_cmd(struct k5_command *cmd);
 	int  __fastcall k5_send_buf(const uint8_t *buf, const int len);
 	int  __fastcall k5_read_eeprom(uint8_t *buf, const int len, const int offset);
 	int  __fastcall k5_write_eeprom(uint8_t *buf, const int len, const int offset);
-	int  __fastcall wait_flash_message();
+	int  __fastcall k5_wait_flash_message();
 	int  __fastcall k5_send_flash_version_message(const char *ver);
-//	int  __fastcall k5_readflash(uint8_t *buf, const int len, const int offset);
+//	int  __fastcall k5_read_flash(uint8_t *buf, const int len, const int offset);
 	int  __fastcall k5_write_flash(const uint8_t *buf, const int len, const int offset, const int firmware_size);
 	int  __fastcall k5_hello();
 	int  __fastcall k5_reboot();
@@ -262,6 +264,7 @@ private:	// User declarations
 	void __fastcall WMDisconnect(TMessage &msg);
 
 protected:
+
 	#pragma option push -vi-
 	BEGIN_MESSAGE_MAP
 		VCL_MESSAGE_HANDLER(WM_WINDOWPOSCHANGING, TWMWindowPosMsg, WMWindowPosChanging);
@@ -277,11 +280,13 @@ protected:
 	END_MESSAGE_MAP(TForm)
 	#pragma option pop
 
-public:		// User declarations
+public:
 	__fastcall TForm1(TComponent* Owner);
 };
 
 extern PACKAGE TForm1 *Form1;
+
+#pragma option pop
 
 #endif
 

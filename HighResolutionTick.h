@@ -39,6 +39,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#pragma option push
+#pragma warn -8027
+
 class CHighResolutionTick
 {
 private:
@@ -172,7 +175,7 @@ public:
 			}
 
 			if (update)
-            	clock_previous = now;
+					clock_previous = now;
 
 		#endif
 
@@ -181,5 +184,7 @@ public:
 		return diff_secs;
 	}
 };
+
+#pragma option pop
 
 #endif

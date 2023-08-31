@@ -26,6 +26,9 @@
 	#include <afxwin.h>	// for CRITICAL_SECTION
 #endif
 
+#pragma option push
+#pragma warn -8027
+
 class CCriticalSectionObj
 {
 private:
@@ -101,6 +104,8 @@ public:
 		}
 	}
 };
+
+#pragma option pop
 
 #endif
 

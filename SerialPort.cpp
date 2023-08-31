@@ -642,8 +642,7 @@ void __fastcall CSerialPort::processRx()
 	if (m_device_handle == INVALID_HANDLE_VALUE)
 		return;
 
-	DWORD bytes_available = 0;
-	DWORD bytes_read      = 0;
+	DWORD bytes_read = 0;
 
 	if (m_rx.overlapped.hEvent == INVALID_HANDLE_VALUE)
 	{	// non-overlapped
@@ -654,7 +653,7 @@ void __fastcall CSerialPort::processRx()
 			if (error != ERROR_INVALID_FUNCTION)
 				pushError(error, "rx ClearCommError ");
 		}
-		bytes_available = m_stat_read.cbInQue;
+		const DWORD bytes_available = m_stat_read.cbInQue;
 
 //		if (bytes_available > 0)
 		{
@@ -681,7 +680,7 @@ void __fastcall CSerialPort::processRx()
 				if (error != ERROR_INVALID_FUNCTION)
 					pushError(error, "rx ClearCommError ");
 			}
-			bytes_available = m_stat_read.cbInQue;
+			const DWORD bytes_available = m_stat_read.cbInQue;
 
 //			if (bytes_available > 0)
 			{
