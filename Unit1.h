@@ -226,6 +226,7 @@ private:	// User declarations
 
 	void __fastcall threadProcess();
 
+	void __fastcall clearRxPacket0();
 	void __fastcall clearRxPacketQueue();
 
 	std::vector <String> __fastcall stringSplit(String s, String param);
@@ -250,7 +251,7 @@ private:	// User declarations
 	int  __fastcall k5_send_flash_version_message(const char *ver);
 //	int  __fastcall k5_readflash(uint8_t *buf, const int len, const int offset);
 	int  __fastcall k5_write_flash(const uint8_t *buf, const int len, const int offset, const int firmware_size);
-	int  __fastcall k5_prepare(const int retry);
+	int  __fastcall k5_hello();
 	int  __fastcall k5_reboot();
 
 	void __fastcall WMWindowPosChanging(TWMWindowPosChanging &msg);

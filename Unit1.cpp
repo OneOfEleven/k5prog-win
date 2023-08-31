@@ -64,7 +64,7 @@ typedef struct
 #define MODE_FLASH_DEBUG                     5            //
 #define MODE_FLASH                           6            //
 
-#define UVK5_PREPARE_TRIES                   4            //
+#define UVK5_HELLO_TRIES                     3            //
 
 #define UVK5_EEPROM_SIZE                     0x00001d00   // 7424
 #define UVK5_MAX_EEPROM_SIZE                 0x00002000   // 8192    the radios calibration data is in 1D00 to 2000
@@ -1057,14 +1057,28 @@ void __fastcall TForm1::SerialPortComboBoxDropDown(TObject *Sender)
 	updateSerialPortCombo();
 }
 
-void __fastcall TForm1::clearRxPacketQueue()
-{
+void __fastcall TForm1::clearRxPacket0()
+{	// remove the 1st packet from the RX packet queue
+
 	CCriticalSection cs(m_thread_cs);
 
-	for (size_t i = 0; i < m_rx_packet_queue.size(); i++)
-		m_rx_packet_queue[i].clear();
+	if (!m_rx_packet_queue.empty())
+	{
+		m_rx_packet_queue[0].clear();
+		m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+	}
+}
 
-	m_rx_packet_queue.resize(0);
+void __fastcall TForm1::clearRxPacketQueue()
+{	// empty the RX packet queue
+
+	CCriticalSection cs(m_thread_cs);
+
+	while (!m_rx_packet_queue.empty())
+	{
+		m_rx_packet_queue[0].clear();
+		m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+	}
 
 	m_serial.rx_buffer_wr = 0;
 }
@@ -2038,24 +2052,22 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 
 		if (rx_data_size < (8 + len))
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
 		if (rx_data[0] != 0x1C ||
-			 rx_data[1] != 0x05 ||
-			 rx_data[4] != buffer[4] ||
-			 rx_data[5] != buffer[5])
+		    rx_data[1] != 0x05 ||
+		    rx_data[4] != buffer[4] ||
+		    rx_data[5] != buffer[5])
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
 		memcpy(buf, &rx_data[8], len);
+
+		clearRxPacket0();			// remove spent packet
 
 		return 1;
 	}
@@ -2120,22 +2132,20 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 
 		if (rx_data_size < 6)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
 		if (rx_data[0] != 0x1E ||
-			 rx_data[1] != 0x05 ||
+		    rx_data[1] != 0x05 ||
 			 rx_data[4] != buffer[4] ||
-			 rx_data[5] != buffer[5])
+		    rx_data[5] != buffer[5])
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
+
+		clearRxPacket0();			// remove spent packet
 
 		return 1;
 	}
@@ -2160,6 +2170,7 @@ int __fastcall TForm1::wait_flash_message()
 
 	if (m_verbose > 0)
 	{
+//		Memo1->Lines->Add("");
 		Memo1->Lines->Add("Waiting for firmware update mode packet ..");
 		Memo1->Update();
 	}
@@ -2185,27 +2196,24 @@ int __fastcall TForm1::wait_flash_message()
 
 		if (rx_data_size < 36)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
+		// expect to see ..
 		//  0x000000: 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
 		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		//  0x000020: 00 00 00 20                                       ...
 
 		if (rx_data[0] != 0x18 ||
-			 rx_data[1] != 0x05 ||
-			 rx_data[2] != 32 ||
-			 rx_data[3] != 0x00 ||
-			 rx_data[4] != 0x01 ||
-			 rx_data[5] != 0x02 ||
-			 rx_data[6] != 0x02)
+		    rx_data[1] != 0x05 ||
+		    rx_data[2] != 32 ||
+		    rx_data[3] != 0x00 ||
+		    rx_data[4] != 0x01 ||
+		    rx_data[5] != 0x02 ||
+		    rx_data[6] != 0x02)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
@@ -2217,7 +2225,6 @@ int __fastcall TForm1::wait_flash_message()
 			const int k = i + 20;
 			if (k >= rx_data_size)
 				break;
-
 			const char c = rx_data[k];
 			if (!isprint(c))
 				break;
@@ -2228,6 +2235,8 @@ int __fastcall TForm1::wait_flash_message()
 
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("Bootloader version '" + m_bootloader_ver + "'");
+
+		clearRxPacket0();		// remove spent packet
 
 		return 1;
 	}
@@ -2258,6 +2267,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 	if (m_verbose > 0)
 	{
 		s.printf("Sending firmware version '%s' ..", ver);
+//		Memo1->Lines->Add("");
 		Memo1->Lines->Add(s);
 		Memo1->Update();
 	}
@@ -2287,29 +2297,28 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 		if (rx_data_size < 36)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
+		// expect to see ..
 		//  0x000000: 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
 		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		//  0x000020: 00 00 00 20                                       ...
 
 		if (rx_data[0] != 0x18 ||
-			 rx_data[1] != 0x05 ||
-			 rx_data[2] != 32 ||
-			 rx_data[3] != 0x00 ||
-			 rx_data[4] != 0x01 ||
-			 rx_data[5] != 0x02 ||
-			 rx_data[6] != 0x02)
+		    rx_data[1] != 0x05 ||
+		    rx_data[2] != 32 ||
+		    rx_data[3] != 0x00 ||
+		    rx_data[4] != 0x01 ||
+		    rx_data[5] != 0x02 ||
+		    rx_data[6] != 0x02)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
+
+		clearRxPacket0();			// remove spent packet
 
 		return 1;
 	}
@@ -2415,9 +2424,7 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 
 		if (rx_data_size < 12)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
@@ -2442,11 +2449,11 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 			 rx_data[8] != buffer[8] ||
 			 rx_data[9] != buffer[9])
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
+
+		clearRxPacket0();			// remove spent packet
 
 		return 1;
 	}
@@ -2457,9 +2464,9 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 	return 0;
 }
 
-int __fastcall TForm1::k5_prepare(const int retry)
+int __fastcall TForm1::k5_hello()
 {
-	String s;
+//	String s;
 	uint8_t buffer[8];
 
 	if (!m_serial.port.connected)
@@ -2477,12 +2484,9 @@ int __fastcall TForm1::k5_prepare(const int retry)
 
 	if (m_verbose > 0)
 	{
-		if (retry >= 0)
-			s.printf("k5_prepare [%d]", retry);
-		else
-			s.printf("k5_prepare");
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add(s);
+		Memo1->Lines->Add("k5_hello ..");
+		Memo1->Update();
 	}
 
 	const int r = k5_send_buf(buffer, sizeof(buffer));
@@ -2510,22 +2514,19 @@ int __fastcall TForm1::k5_prepare(const int retry)
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
 		{	// radio is in firmware update mode
+			clearRxPacket0();		// remove spent packet
 			return -1;
 		}
 
 		if (rx_data[0] != 0x15 || rx_data[1] != 0x05)
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
 		if (rx_data_size < (4 + 16))
 		{
-			CCriticalSection cs(m_thread_cs);
-			m_rx_packet_queue[0].clear();
-			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
+			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
@@ -2536,11 +2537,13 @@ int __fastcall TForm1::k5_prepare(const int retry)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("firmware version '" + m_firmware_ver + "'");
 
+		clearRxPacket0();			// remove spent packet
+
 		return 1;
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: k5_prepare() no valid packet received");
+		Memo1->Lines->Add("error: k5_hello() no valid packet received");
 
 	return 0;
 }
@@ -2599,9 +2602,9 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
-	for (int i = 0; i < UVK5_PREPARE_TRIES; i++)
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
-		r = k5_prepare(i);
+		r = k5_hello();
 		if (r != 0)
 			break;
 		Application->ProcessMessages();
@@ -2897,9 +2900,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
-	for (int i = 0; i < UVK5_PREPARE_TRIES; i++)
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
-		r = k5_prepare(-1);
+		r = k5_hello();
 		if (r != 0)
 			break;
 		Application->ProcessMessages();
@@ -3097,9 +3100,9 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
-	for (int i = 0; i < UVK5_PREPARE_TRIES; i++)
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
-		r = k5_prepare(i);
+		r = k5_hello();
 		if (r != 0)
 			break;
 		Application->ProcessMessages();
