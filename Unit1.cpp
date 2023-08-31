@@ -2530,11 +2530,16 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	Memo1->Clear();
 	Memo1->Lines->Add("");
+	Memo1->Update();
 
 	if (!connect(false))
 		return;
 
 	m_firmware_ver = "";
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Downloading configuration data from the radio ..");
+	Memo1->Update();
 
 	ReadEEPROMButton->Enabled    = false;
 	WriteEEPROMButton->Enabled   = false;
@@ -2559,7 +2564,6 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	}
 	if (r == 0)
 	{	// no valid reply
-		Memo1->Lines->Add("");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
@@ -2692,6 +2696,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	s.printf("Loaded %u (0x%04X) bytes (max 0x%04X) from '%s'", m_loadfile_data.size(), m_loadfile_data.size(), UVK5_FLASH_SIZE, m_loadfile_name.c_str());
 	Memo1->Lines->Add(s);
+	Memo1->Update();
 
 	if (m_loadfile_data.size() < 1000)
 	{
@@ -2825,8 +2830,14 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	// *******************************************
 	// upload the firmware to the radio
 
+	Memo1->Lines->Add("");
+
 	if (!connect(false))
 		return;
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Uploading firmware to the radio ..");
+	Memo1->Update();
 
 	ReadEEPROMButton->Enabled    = false;
 	WriteEEPROMButton->Enabled   = false;
@@ -2969,6 +2980,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	s.printf("Loaded %u bytes from '%s'", m_loadfile_data.size(), m_loadfile_name.c_str());
 	Memo1->Lines->Add(s);
+	Memo1->Update();
 
 	if (m_loadfile_data.size() <= 1000)
 	{
@@ -3018,8 +3030,14 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	// *******************************************
 	// upload the configuration data to the radio
 
+	Memo1->Lines->Add("");
+
 	if (!connect(false))
 		return;
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Uploading configuration data to the radio ..");
+	Memo1->Update();
 
 	ReadEEPROMButton->Enabled    = false;
 	WriteEEPROMButton->Enabled   = false;
