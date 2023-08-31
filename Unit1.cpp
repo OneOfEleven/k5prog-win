@@ -1963,14 +1963,7 @@ int __fastcall TForm1::k5_send_cmd(struct k5_command *cmd)
 		hex_dump(cmd, true);
 
 	if (cmd->obfuscated_cmd != NULL && cmd->obfuscated_len > 0)
-	{
-		const int len = m_serial.port.TxBytes(cmd->obfuscated_cmd, cmd->obfuscated_len);
-		if (len > 0 && m_verbose > 2)
-		{
-			s.printf("sent %d bytes", len);
-			Memo1->Lines->Add(s);
-		}
-	}
+		m_serial.port.TxBytes(cmd->obfuscated_cmd, cmd->obfuscated_len);
 
 	return 1;
 }
@@ -2008,7 +2001,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 	if (!m_serial.port.connected || buf == NULL || len <= 0 || len > 128)
 		return 0;
 
-	if (m_verbose > 1)
+	if (m_verbose > 0)
 	{
 		s.printf("read_eeprom  offset %04X  len %d", offset, len);
 		Memo1->Lines->Add(s);
@@ -2048,7 +2041,10 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
 			hdump(rx_data, rx_data_size);
+		}
 
 		if (rx_data_size < (8 + len))
 		{
@@ -2057,9 +2053,9 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 		}
 
 		if (rx_data[0] != 0x1C ||
-		    rx_data[1] != 0x05 ||
-		    rx_data[4] != buffer[4] ||
-		    rx_data[5] != buffer[5])
+			 rx_data[1] != 0x05 ||
+			 rx_data[4] != buffer[4] ||
+			 rx_data[5] != buffer[5])
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2086,11 +2082,11 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 	if (!m_serial.port.connected || buf == NULL || len <= 0 || len > 128)
 		return 0;
 
-	if (m_verbose > 2)
+	if (m_verbose > 0)
 	{
-//		s.printf("write_eeprom  offset %04X  len %d", offset, len);
-//		Memo1->Lines->Add(s);
-//		Memo1->Update();
+		s.printf("write_eeprom  offset %04X  len %d", offset, len);
+		Memo1->Lines->Add(s);
+		Memo1->Update();
 	}
 
 	buffer[0] = 0x1D;
@@ -2128,7 +2124,10 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
 			hdump(rx_data, rx_data_size);
+		}
 
 		if (rx_data_size < 6)
 		{
@@ -2171,7 +2170,7 @@ int __fastcall TForm1::wait_flash_message()
 	if (m_verbose > 0)
 	{
 //		Memo1->Lines->Add("");
-		Memo1->Lines->Add("Waiting for firmware update mode packet ..");
+		Memo1->Lines->Add("waiting for firmware update mode packet ..");
 		Memo1->Update();
 	}
 
@@ -2192,7 +2191,10 @@ int __fastcall TForm1::wait_flash_message()
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
 			hdump(rx_data, rx_data_size);
+		}
 
 		if (rx_data_size < 36)
 		{
@@ -2266,7 +2268,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 	if (m_verbose > 0)
 	{
-		s.printf("Sending firmware version '%s' ..", ver);
+		s.printf("sending firmware version '%s' ..", ver);
 //		Memo1->Lines->Add("");
 		Memo1->Lines->Add(s);
 		Memo1->Update();
@@ -2293,7 +2295,10 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
 			hdump(rx_data, rx_data_size);
+		}
 
 		if (rx_data_size < 36)
 		{
@@ -2366,7 +2371,7 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 	if (!m_serial.port.connected || buf == NULL || len <= 0 || len > 256)
 		return 0;
 
-	if (m_verbose > 1)
+	if (m_verbose > 0)
 	{
 		s.printf("write_flash  offset %04X  len %d", offset, len);
 		Memo1->Lines->Add(s);
@@ -2420,7 +2425,10 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
 			hdump(rx_data, rx_data_size);
+		}
 
 		if (rx_data_size < 12)
 		{
@@ -2485,7 +2493,7 @@ int __fastcall TForm1::k5_hello()
 	if (m_verbose > 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("k5_hello ..");
+		Memo1->Lines->Add("sending k5_hello ..");
 		Memo1->Update();
 	}
 
@@ -2510,7 +2518,10 @@ int __fastcall TForm1::k5_hello()
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
 			hdump(rx_data, rx_data_size);
+		}
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
 		{	// radio is in firmware update mode
@@ -2563,7 +2574,7 @@ int __fastcall TForm1::k5_reboot()
 	if (m_verbose > 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("rebooting radio ..");
+		Memo1->Lines->Add("sending reboot radio ..");
 	}
 
 	return k5_send_buf(buffer, sizeof(buffer));
@@ -2625,10 +2636,6 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		return;
 	}
 
-	const int verbose = m_verbose;
-	if (m_verbose > 1)
-		m_verbose = 1;
-
 	const int size      = sizeof(eeprom);
 	const int block_len = UVK5_EEPROM_BLOCKSIZE;
 
@@ -2638,17 +2645,9 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	for (unsigned int i = 0; i < size; i += block_len)
 	{
-		if (m_verbose > 0)
-		{
-			s.printf("read EEPROM  %04X  len %3d  %3d%%", i, block_len, (100 * (i + block_len)) / size);
-			Memo1->Lines->Add(s);
-			Memo1->Update();
-		}
-
 		r = k5_read_eeprom(&eeprom[i], block_len, i);
 		if (r <= 0)
 		{
-			m_verbose = verbose;
 			s.printf("error: k5_read_eeprom() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
@@ -2665,8 +2664,6 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("read EEPROM complete");
 	Memo1->Lines->Add("");
-
-	m_verbose = verbose;
 
 	disconnect();
 
@@ -2825,6 +2822,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 			m_firmware_ver = String(firmware_ver);
 
+			Memo1->Lines->Add("");
 			Memo1->Lines->Add("firmware file version '" + m_firmware_ver + "'");
 		}
 	}
@@ -2950,13 +2948,6 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		int len = (int)m_loadfile_data.size() - i;
 		if (len > UVK5_FLASH_BLOCKSIZE)
 			 len = UVK5_FLASH_BLOCKSIZE;
-
-		if (m_verbose > 0)
-		{
-			s.printf("write FLASH  %04X  len %3d   %3d%%", i, len, (100 * (i + len)) / m_loadfile_data.size());
-			Memo1->Lines->Add(s);
-			Memo1->Update();
-		}
 
 		r = k5_write_flash(&m_loadfile_data[i], len, i, m_loadfile_data.size());
 		if (r <= 0)
@@ -3140,10 +3131,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	size = m_loadfile_data.size();
 
-	const int verbose = m_verbose;
-	if (m_verbose > 1)
-		m_verbose = 1;
-
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
 	CGauge1->Update();
@@ -3158,13 +3145,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		const int addr = i;
 		const int len  = UVK5_EEPROM_BLOCKSIZE;
 
-		if (m_verbose > 0)
-		{
-			s.printf("write EEPROM  %04X  len %3d   %3d%%", addr, len, (100 * (i + len)) / size);
-			Memo1->Lines->Add(s);
-			Memo1->Update();
-		}
-
 		const int r = k5_write_eeprom(&m_loadfile_data[addr], len, addr);
 		if (r <= 0)
 		{
@@ -3173,7 +3153,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 			Memo1->Lines->Add("");
 			Memo1->Update();
 			SerialPortComboBoxChange(NULL);
-			m_verbose = verbose;
 			disconnect();
 			return;
 		}
@@ -3189,11 +3168,12 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	SerialPortComboBoxChange(NULL);
 
-	m_verbose = verbose;
-
 	k5_reboot();
 
-	Sleep(50);
+	// give the serial port time to send the packet
+	Sleep(100);
+
+	Memo1->Lines->Add("");
 
 	disconnect();
 }
