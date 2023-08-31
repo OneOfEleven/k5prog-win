@@ -2,7 +2,9 @@
 /*
  * Use at your own risk
  *
- * Uses modified comm routines from Jacek Lipkowski <sq5bpf@lipkowski.org>
+ * Uses modified comm routines from
+ *   Jacek Lipkowski <sq5bpf@lipkowski.org>
+ *   https://github.com/sq5bpf/k5prog
  *
  * This program is licensed under the GNU GENERAL PUBLIC LICENSE v3
  * License text avaliable at: http://www.gnu.org/copyleft/gpl.html
