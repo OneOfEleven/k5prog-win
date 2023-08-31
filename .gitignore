@@ -1,0 +1,9 @@
+*.o
+*.d
+*.obj
+*.dsk
+*.tds
+*.lnk
+*.url
+*.ini
+
