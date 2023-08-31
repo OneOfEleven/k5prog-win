@@ -1,8 +1,5 @@
 
 /*
- * Use at your own risk
- *
- *
  * This program is licensed under the GNU GENERAL PUBLIC LICENSE v3
  * License text avaliable at: http://www.gnu.org/copyleft/gpl.html 
  */
