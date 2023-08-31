@@ -509,59 +509,6 @@ static const int uvk5_writes[][2] =
 	{ 0x0f18, 0x08 },
 	{ 0,      0}
 };
-/*
-static const uint16_t CRC16_TABLE[] =
-{
-	0, 4129, 8258, 12387, 16516, 20645, 24774, 28903, 33032, 37161, 41290, 45419, 49548, 53677, 57806, 61935, 4657, 528, 12915, 8786, 21173, 17044, 29431, 25302,
-	37689, 33560, 45947, 41818, 54205, 50076, 62463, 58334, 9314, 13379, 1056, 5121, 25830, 29895, 17572, 21637, 42346, 46411, 34088, 38153, 58862, 62927, 50604, 54669, 13907,
-	9842, 5649, 1584, 30423, 26358, 22165, 18100, 46939, 42874, 38681, 34616, 63455, 59390, 55197, 51132, 18628, 22757, 26758, 30887, 2112, 6241, 10242, 14371, 51660, 55789,
-	59790, 63919, 35144, 39273, 43274, 47403, 23285, 19156, 31415, 27286, 6769, 2640,14899, 10770, 56317, 52188, 64447, 60318, 39801, 35672, 47931, 43802, 27814, 31879,
-	19684, 23749, 11298, 15363, 3168, 7233, 60846, 64911, 52716, 56781, 44330, 48395,36200, 40265, 32407, 28342, 24277, 20212, 15891, 11826, 7761, 3696, 65439, 61374,
-	57309, 53244, 48923, 44858, 40793, 36728, 37256, 33193, 45514, 41451, 53516, 49453, 61774, 57711, 4224, 161, 12482, 8419, 20484, 16421, 28742, 24679, 33721, 37784, 41979,
-	46042, 49981, 54044, 58239, 62302, 689, 4752, 8947, 13010, 16949, 21012, 25207, 29270, 46570, 42443, 38312, 34185, 62830, 58703, 54572, 50445, 13538, 9411, 5280, 1153, 29798,
-	25671, 21540, 17413, 42971, 47098, 34713, 38840, 59231, 63358, 50973, 55100, 9939, 14066, 1681, 5808, 26199, 30326, 17941, 22068, 55628, 51565, 63758, 59695, 39368,
-	35305, 47498, 43435, 22596, 18533, 30726, 26663, 6336, 2273, 14466, 10403, 52093, 56156, 60223, 64286, 35833, 39896, 43963, 48026, 19061, 23124, 27191, 31254, 2801,
-	6864, 10931, 14994, 64814, 60687, 56684, 52557, 48554, 44427, 40424, 36297, 31782, 27655, 23652, 19525, 15522, 11395, 7392, 3265, 61215, 65342, 53085, 57212, 44955,
-	49082, 36825, 40952, 28183, 32310, 20053, 24180, 11923, 16050, 3793, 7920
-};
-*/
-
-#define POLY16 0x1021
-static const uint16_t CRC16_TABLE[] =
-{
-	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
-	0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
-	0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
-	0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
-	0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485,
-	0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
-	0x3653, 0x2672, 0x1611, 0x0630, 0x76D7, 0x66F6, 0x5695, 0x46B4,
-	0xB75B, 0xA77A, 0x9719, 0x8738, 0xF7DF, 0xE7FE, 0xD79D, 0xC7BC,
-	0x48C4, 0x58E5, 0x6886, 0x78A7, 0x0840, 0x1861, 0x2802, 0x3823,
-	0xC9CC, 0xD9ED, 0xE98E, 0xF9AF, 0x8948, 0x9969, 0xA90A, 0xB92B,
-	0x5AF5, 0x4AD4, 0x7AB7, 0x6A96, 0x1A71, 0x0A50, 0x3A33, 0x2A12,
-	0xDBFD, 0xCBDC, 0xFBBF, 0xEB9E, 0x9B79, 0x8B58, 0xBB3B, 0xAB1A,
-	0x6CA6, 0x7C87, 0x4CE4, 0x5CC5, 0x2C22, 0x3C03, 0x0C60, 0x1C41,
-	0xEDAE, 0xFD8F, 0xCDEC, 0xDDCD, 0xAD2A, 0xBD0B, 0x8D68, 0x9D49,
-	0x7E97, 0x6EB6, 0x5ED5, 0x4EF4, 0x3E13, 0x2E32, 0x1E51, 0x0E70,
-	0xFF9F, 0xEFBE, 0xDFDD, 0xCFFC, 0xBF1B, 0xAF3A, 0x9F59, 0x8F78,
-	0x9188, 0x81A9, 0xB1CA, 0xA1EB, 0xD10C, 0xC12D, 0xF14E, 0xE16F,
-	0x1080, 0x00A1, 0x30C2, 0x20E3, 0x5004, 0x4025, 0x7046, 0x6067,
-	0x83B9, 0x9398, 0xA3FB, 0xB3DA, 0xC33D, 0xD31C, 0xE37F, 0xF35E,
-	0x02B1, 0x1290, 0x22F3, 0x32D2, 0x4235, 0x5214, 0x6277, 0x7256,
-	0xB5EA, 0xA5CB, 0x95A8, 0x8589, 0xF56E, 0xE54F, 0xD52C, 0xC50D,
-	0x34E2, 0x24C3, 0x14A0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
-	0xA7DB, 0xB7FA, 0x8799, 0x97B8, 0xE75F, 0xF77E, 0xC71D, 0xD73C,
-	0x26D3, 0x36F2, 0x0691, 0x16B0, 0x6657, 0x7676, 0x4615, 0x5634,
-	0xD94C, 0xC96D, 0xF90E, 0xE92F, 0x99C8, 0x89E9, 0xB98A, 0xA9AB,
-	0x5844, 0x4865, 0x7806, 0x6827, 0x18C0, 0x08E1, 0x3882, 0x28A3,
-	0xCB7D, 0xDB5C, 0xEB3F, 0xFB1E, 0x8BF9, 0x9BD8, 0xABBB, 0xBB9A,
-	0x4A75, 0x5A54, 0x6A37, 0x7A16, 0x0AF1, 0x1AD0, 0x2AB3, 0x3A92,
-	0xFD2E, 0xED0F, 0xDD6C, 0xCD4D, 0xBDAA, 0xAD8B, 0x9DE8, 0x8DC9,
-	0x7C26, 0x6C07, 0x5C64, 0x4C45, 0x3CA2, 0x2C83, 0x1CE0, 0x0CC1,
-	0xEF1F, 0xFF3E, 0xCF5D, 0xDF7C, 0xAF9B, 0xBFBA, 0x8FD9, 0x9FF8,
-	0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
-};
 
 // ************************************************************************
 
@@ -715,6 +662,8 @@ void __fastcall TForm1::FormCreate(TObject *Sender)
 	SaveDialog1->InitialDir = ExtractFilePath(Application->ExeName);
 
 	CGauge1->Progress = 0;
+
+//	make_CRC16_table();
 
 	// ******************
 
@@ -1282,10 +1231,10 @@ void __fastcall TForm1::threadProcess()
 		{
 			// scan for the start byte
 			int i = 1;
-			while (m_serial.rx_buffer[i] != 0xAB && i < m_serial.rx_buffer_wr)
+			while (m_serial.rx_buffer[i] != 0xAB && i < (int)m_serial.rx_buffer_wr)
 				i++;
 
-			if (i < m_serial.rx_buffer_wr)
+			if (i < (int)m_serial.rx_buffer_wr)
 			{	// possible start byte found - remove everything before it
 				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[i], m_serial.rx_buffer_wr - i);
 				m_serial.rx_buffer_wr -= i;
@@ -1363,7 +1312,7 @@ void __fastcall TForm1::threadProcess()
 
 			if (crc0 != 0xffff && crc1 != 0xffff)
 			{	// compute and check the CRC
-				const uint16_t crc2 = crc16xmodem(&rx_data[0], rx_data.size() - 2);
+				const uint16_t crc2 = crc16(&rx_data[0], rx_data.size() - 2);
 				if (crc2 != crc1)
 					rx_data.resize(0);	// CRC error .. dump the payload
 			}
@@ -1539,10 +1488,13 @@ void __fastcall TForm1::ClearButtonClick(TObject *Sender)
 }
 
 // ************************************************************************
+// CRC
+
+#define CRC_POLY16 0x1021
 
 #if 0
+	// slow bit-bang based
 
-	// slow bit-bang
 	uint16_t __fastcall TForm1::crc16xmodem(const uint8_t *data, const int size)
 	{
 		uint16_t crc = 0;
@@ -1551,28 +1503,131 @@ void __fastcall TForm1::ClearButtonClick(TObject *Sender)
 			for (int i = 0; i < size; i++)
 			{
 				crc ^= (uint16_t)data[i] << 8;
-				for (int k = 0; k < 8; k++)
-					crc = (crc & 0x8000) ? (crc << 1) ^ POLY16 : crc << 1;
+				for (unsigned int k = 8; k > 0; k--)
+					crc = (crc & 0x8000) ? (crc << 1) ^ CRC_POLY16 : crc << 1;
 			}
 		}
 		return crc;
 	}
 
 #else
-
 	// fast table based
-	uint16_t __fastcall TForm1::crc16xmodem(const uint8_t *data, const int size)
-	{
-		uint16_t crc = 0;
-		if (data != NULL && size > 0)
+
+	#if 0
+		// small table
+
+		#if 0
+
+			uint16_t CRC16_TABLE_S[16];
+
+			void __fastcall TForm1::make_CRC16_table()
+			{
+				for (uint16_t i = 0; i < 16; i++)
+				{
+					uint16_t crc = i << 8;
+					for (unsigned int k = 8; k > 0; k--)
+						crc = (crc & 0x8000) ? (crc << 1) ^ CRC_POLY16 : crc << 1;
+					CRC16_TABLE_S[i] = crc;
+				}
+			}
+
+		#else
+
+			static const uint16_t CRC16_TABLE_S[] =
+			{
+				0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
+				0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF
+			};
+
+		#endif
+
+		uint16_t __fastcall TForm1::crc16(const uint8_t *data, const int size)
 		{
-			for (int i = 0; i < size; i++)
-				crc = (crc << 8) ^ CRC16_TABLE[(crc >> 8) ^ data[i]];
+			uint16_t crc = 0;
+			if (data != NULL && size > 0)
+			{
+				for (int i = 0; i < size; i++)
+				{
+					crc ^= (uint16_t)data[i] << 8;
+					crc = (crc << 4) ^ CRC16_TABLE_S[crc >> 12];
+					crc = (crc << 4) ^ CRC16_TABLE_S[crc >> 12];
+				}
+			}
+			return crc;
 		}
-		return crc;
-	}
+
+	#else
+		// large table
+
+		#if 0
+
+			uint16_t CRC16_TABLE_L[256];
+
+			void __fastcall TForm1::make_CRC16_table()
+			{
+				for (uint16_t i = 0; i < 256; i++)
+				{
+					uint16_t crc = i << 8;
+					for (unsigned int k = 8; k > 0; k--)
+						crc = (crc & 0x8000) ? (crc << 1) ^ CRC_POLY16 : crc << 1;
+					CRC16_TABLE_L[i] = crc;
+				}
+			}
+
+		#else
+
+			static const uint16_t CRC16_TABLE_L[] =
+			{
+				0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
+				0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
+				0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
+				0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
+				0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485,
+				0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
+				0x3653, 0x2672, 0x1611, 0x0630, 0x76D7, 0x66F6, 0x5695, 0x46B4,
+				0xB75B, 0xA77A, 0x9719, 0x8738, 0xF7DF, 0xE7FE, 0xD79D, 0xC7BC,
+				0x48C4, 0x58E5, 0x6886, 0x78A7, 0x0840, 0x1861, 0x2802, 0x3823,
+				0xC9CC, 0xD9ED, 0xE98E, 0xF9AF, 0x8948, 0x9969, 0xA90A, 0xB92B,
+				0x5AF5, 0x4AD4, 0x7AB7, 0x6A96, 0x1A71, 0x0A50, 0x3A33, 0x2A12,
+				0xDBFD, 0xCBDC, 0xFBBF, 0xEB9E, 0x9B79, 0x8B58, 0xBB3B, 0xAB1A,
+				0x6CA6, 0x7C87, 0x4CE4, 0x5CC5, 0x2C22, 0x3C03, 0x0C60, 0x1C41,
+				0xEDAE, 0xFD8F, 0xCDEC, 0xDDCD, 0xAD2A, 0xBD0B, 0x8D68, 0x9D49,
+				0x7E97, 0x6EB6, 0x5ED5, 0x4EF4, 0x3E13, 0x2E32, 0x1E51, 0x0E70,
+				0xFF9F, 0xEFBE, 0xDFDD, 0xCFFC, 0xBF1B, 0xAF3A, 0x9F59, 0x8F78,
+				0x9188, 0x81A9, 0xB1CA, 0xA1EB, 0xD10C, 0xC12D, 0xF14E, 0xE16F,
+				0x1080, 0x00A1, 0x30C2, 0x20E3, 0x5004, 0x4025, 0x7046, 0x6067,
+				0x83B9, 0x9398, 0xA3FB, 0xB3DA, 0xC33D, 0xD31C, 0xE37F, 0xF35E,
+				0x02B1, 0x1290, 0x22F3, 0x32D2, 0x4235, 0x5214, 0x6277, 0x7256,
+				0xB5EA, 0xA5CB, 0x95A8, 0x8589, 0xF56E, 0xE54F, 0xD52C, 0xC50D,
+				0x34E2, 0x24C3, 0x14A0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
+				0xA7DB, 0xB7FA, 0x8799, 0x97B8, 0xE75F, 0xF77E, 0xC71D, 0xD73C,
+				0x26D3, 0x36F2, 0x0691, 0x16B0, 0x6657, 0x7676, 0x4615, 0x5634,
+				0xD94C, 0xC96D, 0xF90E, 0xE92F, 0x99C8, 0x89E9, 0xB98A, 0xA9AB,
+				0x5844, 0x4865, 0x7806, 0x6827, 0x18C0, 0x08E1, 0x3882, 0x28A3,
+				0xCB7D, 0xDB5C, 0xEB3F, 0xFB1E, 0x8BF9, 0x9BD8, 0xABBB, 0xBB9A,
+				0x4A75, 0x5A54, 0x6A37, 0x7A16, 0x0AF1, 0x1AD0, 0x2AB3, 0x3A92,
+				0xFD2E, 0xED0F, 0xDD6C, 0xCD4D, 0xBDAA, 0xAD8B, 0x9DE8, 0x8DC9,
+				0x7C26, 0x6C07, 0x5C64, 0x4C45, 0x3CA2, 0x2C83, 0x1CE0, 0x0CC1,
+				0xEF1F, 0xFF3E, 0xCF5D, 0xDF7C, 0xAF9B, 0xBFBA, 0x8FD9, 0x9FF8,
+				0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
+			};
+
+		#endif
+
+		uint16_t __fastcall TForm1::crc16(const uint8_t *data, const int size)
+		{
+			uint16_t crc = 0;
+			if (data != NULL && size > 0)
+				for (int i = 0; i < size; i++)
+					crc = (crc << 8) ^ CRC16_TABLE_L[(crc >> 8) ^ data[i]];
+			return crc;
+		}
+
+	#endif
 
 #endif
+
+// ************************************************************************
 
 void __fastcall TForm1::destroy_k5_struct(struct k5_command *cmd)
 {
@@ -1782,7 +1837,7 @@ int __fastcall TForm1::k5_obfuscate(struct k5_command *cmd)
 
 	memcpy(cmd->obfuscated_cmd + 4, cmd->cmd, cmd->len);
 
-	c = crc16xmodem(cmd->obfuscated_cmd + 4, cmd->len);
+	c = crc16(cmd->obfuscated_cmd + 4, cmd->len);
 	cmd->obfuscated_cmd[cmd->len + 4] = (c >> 0) & 0xff;
 	cmd->obfuscated_cmd[cmd->len + 5] = (c >> 8) & 0xff;
 
@@ -1858,7 +1913,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 		hdump(cmd->cmd, cmd->len);
 	}
 
-	const uint16_t crc1 = crc16xmodem(cmd->cmd, cmd->len - 2);
+	const uint16_t crc1 = crc16(cmd->cmd, cmd->len - 2);
 	const uint16_t crc2 = ((uint16_t)cmd->cmd[cmd->len - 1] << 8) | ((uint16_t)cmd->cmd[cmd->len - 2] << 0);
 
 	//if ((*cmd->cmd[*cmd->cmd - 2] == ((c << 0) & 0xff)) && (*cmd->cmd[*cmd->cmd - 2] == ((c << 8) & 0xff)))
@@ -2709,7 +2764,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	bool encrypted = true;
 
-	const uint16_t crc1 = crc16xmodem(&m_loadfile_data[0], m_loadfile_data.size() - 2);
+	const uint16_t crc1 = crc16(&m_loadfile_data[0], m_loadfile_data.size() - 2);
 	const uint16_t crc2 = ((uint16_t)m_loadfile_data[m_loadfile_data.size() - 1] << 8) | ((uint16_t)m_loadfile_data[m_loadfile_data.size() - 2] << 0);
 
 	#if 0

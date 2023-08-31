@@ -230,7 +230,9 @@ private:	// User declarations
 
 	void __fastcall hex_dump(const struct k5_command *cmd, const bool tx);
 
-	uint16_t __fastcall crc16xmodem(const uint8_t *data, const int size);
+	void     __fastcall make_CRC16_table();
+	uint16_t __fastcall crc16(const uint8_t *data, const int size);
+
 	void __fastcall destroy_k5_struct(struct k5_command *cmd);
 	void __fastcall hdump(const uint8_t *buf, const int len);
 	void __fastcall k5_hexdump(const struct k5_command *cmd);
