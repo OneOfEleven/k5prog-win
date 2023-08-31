@@ -2148,6 +2148,8 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 
 int __fastcall TForm1::wait_flash_message()
 {
+//	String s;
+
 	if (!m_serial.port.connected)
 		return 0;
 
@@ -2155,6 +2157,12 @@ int __fastcall TForm1::wait_flash_message()
 
 	// delete any previously rx'ed/saved packets
 	clearRxPacketQueue();
+
+	if (m_verbose > 0)
+	{
+		Memo1->Lines->Add("Waiting for firmware update mode packet ..");
+		Memo1->Update();
+	}
 
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
@@ -2232,6 +2240,7 @@ int __fastcall TForm1::wait_flash_message()
 
 int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 {
+	String  s;
 	uint8_t buffer[4 + 16 + 1];
 
 	if (!m_serial.port.connected || ver == NULL || strlen(ver) > 16)
@@ -2245,6 +2254,13 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 	buffer[3] = 0x00;
 
 	strcpy(buffer + 4, ver);
+
+	if (m_verbose > 0)
+	{
+		s.printf("Sending firmware version '%s' ..", ver);
+		Memo1->Lines->Add(s);
+		Memo1->Update();
+	}
 
 	const int r = k5_send_buf(buffer, 4 + 16);
 	if (r <= 0)
@@ -2294,9 +2310,6 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 			m_rx_packet_queue.erase(m_rx_packet_queue.begin() + 0);
 			continue;
 		}
-
-		Memo1->Lines->Add("");
-		Memo1->Lines->Add("sent firmware version '" + String((char *)buffer + 4) + "'");
 
 		return 1;
 	}
@@ -2547,7 +2560,7 @@ int __fastcall TForm1::k5_reboot()
 	if (m_verbose > 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("* rebooting radio");
+		Memo1->Lines->Add("rebooting radio ..");
 	}
 
 	return k5_send_buf(buffer, sizeof(buffer));
