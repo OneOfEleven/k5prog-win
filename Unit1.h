@@ -58,6 +58,32 @@
 
 #define ARRAY_SIZE(array)    (sizeof(array) / sizeof(array[0]))
 
+// ******************************************************************************
+
+#define MODE_NONE                            0            //
+#define MODE_READ                            1            //
+#define MODE_WRITE                           2            //
+#define MODE_WRITE_MOST                      3            //
+#define MODE_WRITE_ALL                       4            //
+#define MODE_FLASH_DEBUG                     5            //
+#define MODE_FLASH                           6            //
+
+#define UVK5_HELLO_TRIES                     2            //
+
+#define UVK5_EEPROM_SIZE                     0x00001d00   // 7424
+#define UVK5_MAX_EEPROM_SIZE                 0x00002000   // 8192    the radios calibration data is in 1D00 to 2000
+#define UVK5_EEPROM_BLOCKSIZE                128          //
+
+#define UVK5_FLASH_SIZE                      0x0000f000   // 61440
+#define UVK5_MAX_FLASH_SIZE                  0x00010000   // 65536   the bootloader is in F000 to FFFF
+#define UVK5_FLASH_BLOCKSIZE                 256          //
+
+#define DEFAULT_SERIAL_SPEED                 38400        //
+//#define DEFAULT_FILE_NAME                    "k5_eeprom.raw"
+//#define DEFAULT_FLASH_NAME                   "k5_flash.raw"
+
+// ******************************************************************************
+
 #pragma option push
 #pragma warn -8027
 
@@ -169,6 +195,8 @@ __published:
 	TTrackBar *VerboseTrackBar;
 	TCGauge *CGauge1;
 	TButton *WriteEEPROMButton;
+	TButton *ReadADCButton;
+	TButton *ReadRSSIButton;
 	void __fastcall FormCreate(TObject *Sender);
 	void __fastcall FormDestroy(TObject *Sender);
 	void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
@@ -182,6 +210,8 @@ __published:
 	void __fastcall WriteFirmwareButtonClick(TObject *Sender);
 	void __fastcall WriteEEPROMButtonClick(TObject *Sender);
 	void __fastcall SerialPortComboBoxChange(TObject *Sender);
+	void __fastcall ReadADCButtonClick(TObject *Sender);
+	void __fastcall ReadRSSIButtonClick(TObject *Sender);
 
 private:
 
@@ -201,6 +231,8 @@ private:
 	String                m_firmware_ver;
 
 	int                   m_verbose;
+
+	uint8_t               m_eeprom[UVK5_MAX_EEPROM_SIZE];
 
 	std::vector < std::vector <uint8_t> > m_rx_packet_queue;
 
@@ -254,6 +286,8 @@ private:
 //	int  __fastcall k5_read_flash(uint8_t *buf, const int len, const int offset);
 	int  __fastcall k5_write_flash(const uint8_t *buf, const int len, const int offset, const int firmware_size);
 	int  __fastcall k5_hello();
+	int  __fastcall k5_readADC();
+	int  __fastcall k5_readRSSI();
 	int  __fastcall k5_reboot();
 
 	void __fastcall WMWindowPosChanging(TWMWindowPosChanging &msg);

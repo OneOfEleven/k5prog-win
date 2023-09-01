@@ -1,12 +1,12 @@
 object Form1: TForm1
   Left = 297
   Top = 139
-  Width = 590
+  Width = 690
   Height = 300
   Caption = 'Form1'
   Color = clBtnFace
   Constraints.MinHeight = 300
-  Constraints.MinWidth = 590
+  Constraints.MinWidth = 690
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -11
@@ -23,7 +23,7 @@ object Form1: TForm1
   object StatusBar1: TStatusBar
     Left = 0
     Top = 242
-    Width = 574
+    Width = 674
     Height = 19
     Panels = <
       item
@@ -41,14 +41,14 @@ object Form1: TForm1
   object Panel1: TPanel
     Left = 0
     Top = 85
-    Width = 574
+    Width = 674
     Height = 157
     Align = alClient
     TabOrder = 1
     object Memo1: TMemo
       Left = 1
       Top = 1
-      Width = 572
+      Width = 672
       Height = 153
       Align = alTop
       Anchors = [akLeft, akTop, akRight, akBottom]
@@ -69,7 +69,7 @@ object Form1: TForm1
   object Panel2: TPanel
     Left = 0
     Top = 0
-    Width = 574
+    Width = 674
     Height = 85
     Align = alTop
     TabOrder = 2
@@ -197,6 +197,26 @@ object Form1: TForm1
       ShowHint = True
       TabOrder = 4
       OnClick = WriteEEPROMButtonClick
+    end
+    object ReadADCButton: TButton
+      Left = 576
+      Top = 12
+      Width = 75
+      Height = 25
+      Cursor = crHandPoint
+      Caption = 'Read ADC'
+      TabOrder = 7
+      OnClick = ReadADCButtonClick
+    end
+    object ReadRSSIButton: TButton
+      Left = 576
+      Top = 50
+      Width = 75
+      Height = 25
+      Cursor = crHandPoint
+      Caption = 'Read RSSI'
+      TabOrder = 8
+      OnClick = ReadRSSIButtonClick
     end
   end
   object OpenDialog1: TOpenDialog

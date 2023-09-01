@@ -46,6 +46,30 @@
 
 TForm1 *Form1 = NULL;
 
+// ************************************************************************
+
+// known serial commands:
+//
+// 0x0514 .. read firmware version
+// 0x0517 .. read flash block
+// 0x0518 .. radio streams this when in firmware update mode
+// 0x0519 .. write flash block .. only in firmware update mode
+// 0x051B .. read configuration block
+// 0x051D .. write configuration block
+// 0x051F ..
+// 0x0521 ..
+// 0x0527 .. read RSSI, noise and glitch
+// 0x0529 .. read battery ADC value
+// 0x052D ..
+// 0x052F ..
+// 0x0530 .. send firmware version .. only in firmware update mode
+// 0x05DD .. reboot radio
+
+const uint8_t session_id[] = {0x6a, 0x39, 0x57, 0x64};
+//const uint8_t session_id[] = {0x46, 0x9c, 0x6f, 0x64};
+
+// ************************************************************************
+
 typedef struct
 {
 	uint16_t MajorVer;
@@ -53,491 +77,6 @@ typedef struct
 	uint16_t ReleaseVer;
 	uint16_t BuildVer;
 } TVersion;
-
-// ************************************************************************
-
-#define MODE_NONE                            0            //
-#define MODE_READ                            1            //
-#define MODE_WRITE                           2            //
-#define MODE_WRITE_MOST                      3            //
-#define MODE_WRITE_ALL                       4            //
-#define MODE_FLASH_DEBUG                     5            //
-#define MODE_FLASH                           6            //
-
-#define UVK5_HELLO_TRIES                     2            //
-
-#define UVK5_EEPROM_SIZE                     0x00001d00   // 7424
-#define UVK5_MAX_EEPROM_SIZE                 0x00002000   // 8192    the radios calibration data is in 1D00 to 2000
-#define UVK5_EEPROM_BLOCKSIZE                128          //
-
-#define UVK5_FLASH_SIZE                      0x0000f000   // 61440
-#define UVK5_MAX_FLASH_SIZE                  0x00010000   // 65536   the bootloader is in F000 to FFFF
-#define UVK5_FLASH_BLOCKSIZE                 256          //
-
-#define DEFAULT_SERIAL_SPEED                 38400        //
-//#define DEFAULT_FILE_NAME                    "k5_eeprom.raw"
-//#define DEFAULT_FLASH_NAME                   "k5_flash.raw"
-
-static const int uvk5_writesx[][2] =
-{
-//	{ 0x0e70, 0x60 },
-	{ 0x0eb0, 0x08 },
-	{ 0,      0}
-};
-
-static const int uvk5_writes[][2] =
-{
-	{ 0x0e70, 0x60 },
-	{ 0x0000, 0x10 },
-	{ 0x0f50, 0x10 },
-	{ 0x0010, 0x10 },
-	{ 0x0f60, 0x10 },
-	{ 0x0020, 0x10 },
-	{ 0x0f70, 0x10 },
-	{ 0x0030, 0x10 },
-	{ 0x0f80, 0x10 },
-	{ 0x0040, 0x10 },
-	{ 0x0f90, 0x10 },
-	{ 0x0050, 0x10 },
-	{ 0x0fa0, 0x10 },
-	{ 0x0060, 0x10 },
-	{ 0x0fb0, 0x10 },
-	{ 0x0070, 0x10 },
-	{ 0x0fc0, 0x10 },
-	{ 0x0080, 0x10 },
-	{ 0x0fd0, 0x10 },
-	{ 0x0090, 0x10 },
-	{ 0x0fe0, 0x10 },
-	{ 0x00a0, 0x10 },
-	{ 0x0ff0, 0x10 },
-	{ 0x00b0, 0x10 },
-	{ 0x1000, 0x10 },
-	{ 0x00c0, 0x10 },
-	{ 0x1010, 0x10 },
-	{ 0x00d0, 0x10 },
-	{ 0x1020, 0x10 },
-	{ 0x00e0, 0x10 },
-	{ 0x1030, 0x10 },
-	{ 0x00f0, 0x10 },
-	{ 0x1040, 0x10 },
-	{ 0x0100, 0x10 },
-	{ 0x1050, 0x10 },
-	{ 0x0110, 0x10 },
-	{ 0x1060, 0x10 },
-	{ 0x0120, 0x10 },
-	{ 0x1070, 0x10 },
-	{ 0x0130, 0x10 },
-	{ 0x1080, 0x10 },
-	{ 0x0140, 0x10 },
-	{ 0x1090, 0x10 },
-	{ 0x0150, 0x10 },
-	{ 0x10a0, 0x10 },
-	{ 0x0160, 0x10 },
-	{ 0x10b0, 0x10 },
-	{ 0x0170, 0x10 },
-	{ 0x10c0, 0x10 },
-	{ 0x0180, 0x10 },
-	{ 0x10d0, 0x10 },
-	{ 0x0190, 0x10 },
-	{ 0x10e0, 0x10 },
-	{ 0x01a0, 0x10 },
-	{ 0x10f0, 0x10 },
-	{ 0x01b0, 0x10 },
-	{ 0x1100, 0x10 },
-	{ 0x01c0, 0x10 },
-	{ 0x1110, 0x10 },
-	{ 0x01d0, 0x10 },
-	{ 0x1120, 0x10 },
-	{ 0x01e0, 0x10 },
-	{ 0x1130, 0x10 },
-	{ 0x01f0, 0x10 },
-	{ 0x1140, 0x10 },
-	{ 0x0200, 0x10 },
-	{ 0x1150, 0x10 },
-	{ 0x0210, 0x10 },
-	{ 0x1160, 0x10 },
-	{ 0x0220, 0x10 },
-	{ 0x1170, 0x10 },
-	{ 0x0230, 0x10 },
-	{ 0x1180, 0x10 },
-	{ 0x0240, 0x10 },
-	{ 0x1190, 0x10 },
-	{ 0x0250, 0x10 },
-	{ 0x11a0, 0x10 },
-	{ 0x0260, 0x10 },
-	{ 0x11b0, 0x10 },
-	{ 0x0270, 0x10 },
-	{ 0x11c0, 0x10 },
-	{ 0x0280, 0x10 },
-	{ 0x11d0, 0x10 },
-	{ 0x0290, 0x10 },
-	{ 0x11e0, 0x10 },
-	{ 0x02a0, 0x10 },
-	{ 0x11f0, 0x10 },
-	{ 0x02b0, 0x10 },
-	{ 0x1200, 0x10 },
-	{ 0x02c0, 0x10 },
-	{ 0x1210, 0x10 },
-	{ 0x02d0, 0x10 },
-	{ 0x1220, 0x10 },
-	{ 0x02e0, 0x10 },
-	{ 0x1230, 0x10 },
-	{ 0x02f0, 0x10 },
-	{ 0x1240, 0x10 },
-	{ 0x0300, 0x10 },
-	{ 0x1250, 0x10 },
-	{ 0x0310, 0x10 },
-	{ 0x1260, 0x10 },
-	{ 0x0320, 0x10 },
-	{ 0x1270, 0x10 },
-	{ 0x0330, 0x10 },
-	{ 0x1280, 0x10 },
-	{ 0x0340, 0x10 },
-	{ 0x1290, 0x10 },
-	{ 0x0350, 0x10 },
-	{ 0x12a0, 0x10 },
-	{ 0x0360, 0x10 },
-	{ 0x12b0, 0x10 },
-	{ 0x0370, 0x10 },
-	{ 0x12c0, 0x10 },
-	{ 0x0380, 0x10 },
-	{ 0x12d0, 0x10 },
-	{ 0x0390, 0x10 },
-	{ 0x12e0, 0x10 },
-	{ 0x03a0, 0x10 },
-	{ 0x12f0, 0x10 },
-	{ 0x03b0, 0x10 },
-	{ 0x1300, 0x10 },
-	{ 0x03c0, 0x10 },
-	{ 0x1310, 0x10 },
-	{ 0x03d0, 0x10 },
-	{ 0x1320, 0x10 },
-	{ 0x03e0, 0x10 },
-	{ 0x1330, 0x10 },
-	{ 0x03f0, 0x10 },
-	{ 0x1340, 0x10 },
-	{ 0x0400, 0x10 },
-	{ 0x1350, 0x10 },
-	{ 0x0410, 0x10 },
-	{ 0x1360, 0x10 },
-	{ 0x0420, 0x10 },
-	{ 0x1370, 0x10 },
-	{ 0x0430, 0x10 },
-	{ 0x1380, 0x10 },
-	{ 0x0440, 0x10 },
-	{ 0x1390, 0x10 },
-	{ 0x0450, 0x10 },
-	{ 0x13a0, 0x10 },
-	{ 0x0460, 0x10 },
-	{ 0x13b0, 0x10 },
-	{ 0x0470, 0x10 },
-	{ 0x13c0, 0x10 },
-	{ 0x0480, 0x10 },
-	{ 0x13d0, 0x10 },
-	{ 0x0490, 0x10 },
-	{ 0x13e0, 0x10 },
-	{ 0x04a0, 0x10 },
-	{ 0x13f0, 0x10 },
-	{ 0x04b0, 0x10 },
-	{ 0x1400, 0x10 },
-	{ 0x04c0, 0x10 },
-	{ 0x1410, 0x10 },
-	{ 0x04d0, 0x10 },
-	{ 0x1420, 0x10 },
-	{ 0x04e0, 0x10 },
-	{ 0x1430, 0x10 },
-	{ 0x04f0, 0x10 },
-	{ 0x1440, 0x10 },
-	{ 0x0500, 0x10 },
-	{ 0x1450, 0x10 },
-	{ 0x0510, 0x10 },
-	{ 0x1460, 0x10 },
-	{ 0x0520, 0x10 },
-	{ 0x1470, 0x10 },
-	{ 0x0530, 0x10 },
-	{ 0x1480, 0x10 },
-	{ 0x0540, 0x10 },
-	{ 0x1490, 0x10 },
-	{ 0x0550, 0x10 },
-	{ 0x14a0, 0x10 },
-	{ 0x0560, 0x10 },
-	{ 0x14b0, 0x10 },
-	{ 0x0570, 0x10 },
-	{ 0x14c0, 0x10 },
-	{ 0x0580, 0x10 },
-	{ 0x14d0, 0x10 },
-	{ 0x0590, 0x10 },
-	{ 0x14e0, 0x10 },
-	{ 0x05a0, 0x10 },
-	{ 0x14f0, 0x10 },
-	{ 0x05b0, 0x10 },
-	{ 0x1500, 0x10 },
-	{ 0x05c0, 0x10 },
-	{ 0x1510, 0x10 },
-	{ 0x05d0, 0x10 },
-	{ 0x1520, 0x10 },
-	{ 0x05e0, 0x10 },
-	{ 0x1530, 0x10 },
-	{ 0x05f0, 0x10 },
-	{ 0x1540, 0x10 },
-	{ 0x0600, 0x10 },
-	{ 0x1550, 0x10 },
-	{ 0x0610, 0x10 },
-	{ 0x1560, 0x10 },
-	{ 0x0620, 0x10 },
-	{ 0x1570, 0x10 },
-	{ 0x0630, 0x10 },
-	{ 0x1580, 0x10 },
-	{ 0x0640, 0x10 },
-	{ 0x1590, 0x10 },
-	{ 0x0650, 0x10 },
-	{ 0x15a0, 0x10 },
-	{ 0x0660, 0x10 },
-	{ 0x15b0, 0x10 },
-	{ 0x0670, 0x10 },
-	{ 0x15c0, 0x10 },
-	{ 0x0680, 0x10 },
-	{ 0x15d0, 0x10 },
-	{ 0x0690, 0x10 },
-	{ 0x15e0, 0x10 },
-	{ 0x06a0, 0x10 },
-	{ 0x15f0, 0x10 },
-	{ 0x06b0, 0x10 },
-	{ 0x1600, 0x10 },
-	{ 0x06c0, 0x10 },
-	{ 0x1610, 0x10 },
-	{ 0x06d0, 0x10 },
-	{ 0x1620, 0x10 },
-	{ 0x06e0, 0x10 },
-	{ 0x1630, 0x10 },
-	{ 0x06f0, 0x10 },
-	{ 0x1640, 0x10 },
-	{ 0x0700, 0x10 },
-	{ 0x1650, 0x10 },
-	{ 0x0710, 0x10 },
-	{ 0x1660, 0x10 },
-	{ 0x0720, 0x10 },
-	{ 0x1670, 0x10 },
-	{ 0x0730, 0x10 },
-	{ 0x1680, 0x10 },
-	{ 0x0740, 0x10 },
-	{ 0x1690, 0x10 },
-	{ 0x0750, 0x10 },
-	{ 0x16a0, 0x10 },
-	{ 0x0760, 0x10 },
-	{ 0x16b0, 0x10 },
-	{ 0x0770, 0x10 },
-	{ 0x16c0, 0x10 },
-	{ 0x0780, 0x10 },
-	{ 0x16d0, 0x10 },
-	{ 0x0790, 0x10 },
-	{ 0x16e0, 0x10 },
-	{ 0x07a0, 0x10 },
-	{ 0x16f0, 0x10 },
-	{ 0x07b0, 0x10 },
-	{ 0x1700, 0x10 },
-	{ 0x07c0, 0x10 },
-	{ 0x1710, 0x10 },
-	{ 0x07d0, 0x10 },
-	{ 0x1720, 0x10 },
-	{ 0x07e0, 0x10 },
-	{ 0x1730, 0x10 },
-	{ 0x07f0, 0x10 },
-	{ 0x1740, 0x10 },
-	{ 0x0800, 0x10 },
-	{ 0x1750, 0x10 },
-	{ 0x0810, 0x10 },
-	{ 0x1760, 0x10 },
-	{ 0x0820, 0x10 },
-	{ 0x1770, 0x10 },
-	{ 0x0830, 0x10 },
-	{ 0x1780, 0x10 },
-	{ 0x0840, 0x10 },
-	{ 0x1790, 0x10 },
-	{ 0x0850, 0x10 },
-	{ 0x17a0, 0x10 },
-	{ 0x0860, 0x10 },
-	{ 0x17b0, 0x10 },
-	{ 0x0870, 0x10 },
-	{ 0x17c0, 0x10 },
-	{ 0x0880, 0x10 },
-	{ 0x17d0, 0x10 },
-	{ 0x0890, 0x10 },
-	{ 0x17e0, 0x10 },
-	{ 0x08a0, 0x10 },
-	{ 0x17f0, 0x10 },
-	{ 0x08b0, 0x10 },
-	{ 0x1800, 0x10 },
-	{ 0x08c0, 0x10 },
-	{ 0x1810, 0x10 },
-	{ 0x08d0, 0x10 },
-	{ 0x1820, 0x10 },
-	{ 0x08e0, 0x10 },
-	{ 0x1830, 0x10 },
-	{ 0x08f0, 0x10 },
-	{ 0x1840, 0x10 },
-	{ 0x0900, 0x10 },
-	{ 0x1850, 0x10 },
-	{ 0x0910, 0x10 },
-	{ 0x1860, 0x10 },
-	{ 0x0920, 0x10 },
-	{ 0x1870, 0x10 },
-	{ 0x0930, 0x10 },
-	{ 0x1880, 0x10 },
-	{ 0x0940, 0x10 },
-	{ 0x1890, 0x10 },
-	{ 0x0950, 0x10 },
-	{ 0x18a0, 0x10 },
-	{ 0x0960, 0x10 },
-	{ 0x18b0, 0x10 },
-	{ 0x0970, 0x10 },
-	{ 0x18c0, 0x10 },
-	{ 0x0980, 0x10 },
-	{ 0x18d0, 0x10 },
-	{ 0x0990, 0x10 },
-	{ 0x18e0, 0x10 },
-	{ 0x09a0, 0x10 },
-	{ 0x18f0, 0x10 },
-	{ 0x09b0, 0x10 },
-	{ 0x1900, 0x10 },
-	{ 0x09c0, 0x10 },
-	{ 0x1910, 0x10 },
-	{ 0x09d0, 0x10 },
-	{ 0x1920, 0x10 },
-	{ 0x09e0, 0x10 },
-	{ 0x1930, 0x10 },
-	{ 0x09f0, 0x10 },
-	{ 0x1940, 0x10 },
-	{ 0x0a00, 0x10 },
-	{ 0x1950, 0x10 },
-	{ 0x0a10, 0x10 },
-	{ 0x1960, 0x10 },
-	{ 0x0a20, 0x10 },
-	{ 0x1970, 0x10 },
-	{ 0x0a30, 0x10 },
-	{ 0x1980, 0x10 },
-	{ 0x0a40, 0x10 },
-	{ 0x1990, 0x10 },
-	{ 0x0a50, 0x10 },
-	{ 0x19a0, 0x10 },
-	{ 0x0a60, 0x10 },
-	{ 0x19b0, 0x10 },
-	{ 0x0a70, 0x10 },
-	{ 0x19c0, 0x10 },
-	{ 0x0a80, 0x10 },
-	{ 0x19d0, 0x10 },
-	{ 0x0a90, 0x10 },
-	{ 0x19e0, 0x10 },
-	{ 0x0aa0, 0x10 },
-	{ 0x19f0, 0x10 },
-	{ 0x0ab0, 0x10 },
-	{ 0x1a00, 0x10 },
-	{ 0x0ac0, 0x10 },
-	{ 0x1a10, 0x10 },
-	{ 0x0ad0, 0x10 },
-	{ 0x1a20, 0x10 },
-	{ 0x0ae0, 0x10 },
-	{ 0x1a30, 0x10 },
-	{ 0x0af0, 0x10 },
-	{ 0x1a40, 0x10 },
-	{ 0x0b00, 0x10 },
-	{ 0x1a50, 0x10 },
-	{ 0x0b10, 0x10 },
-	{ 0x1a60, 0x10 },
-	{ 0x0b20, 0x10 },
-	{ 0x1a70, 0x10 },
-	{ 0x0b30, 0x10 },
-	{ 0x1a80, 0x10 },
-	{ 0x0b40, 0x10 },
-	{ 0x1a90, 0x10 },
-	{ 0x0b50, 0x10 },
-	{ 0x1aa0, 0x10 },
-	{ 0x0b60, 0x10 },
-	{ 0x1ab0, 0x10 },
-	{ 0x0b70, 0x10 },
-	{ 0x1ac0, 0x10 },
-	{ 0x0b80, 0x10 },
-	{ 0x1ad0, 0x10 },
-	{ 0x0b90, 0x10 },
-	{ 0x1ae0, 0x10 },
-	{ 0x0ba0, 0x10 },
-	{ 0x1af0, 0x10 },
-	{ 0x0bb0, 0x10 },
-	{ 0x1b00, 0x10 },
-	{ 0x0bc0, 0x10 },
-	{ 0x1b10, 0x10 },
-	{ 0x0bd0, 0x10 },
-	{ 0x1b20, 0x10 },
-	{ 0x0be0, 0x10 },
-	{ 0x1b30, 0x10 },
-	{ 0x0bf0, 0x10 },
-	{ 0x1b40, 0x10 },
-	{ 0x0c00, 0x10 },
-	{ 0x1b50, 0x10 },
-	{ 0x0c10, 0x10 },
-	{ 0x1b60, 0x10 },
-	{ 0x0c20, 0x10 },
-	{ 0x1b70, 0x10 },
-	{ 0x0c30, 0x10 },
-	{ 0x1b80, 0x10 },
-	{ 0x0c40, 0x10 },
-	{ 0x1b90, 0x10 },
-	{ 0x0c50, 0x10 },
-	{ 0x1ba0, 0x10 },
-	{ 0x0c60, 0x10 },
-	{ 0x1bb0, 0x10 },
-	{ 0x0c70, 0x10 },
-	{ 0x1bc0, 0x10 },
-	{ 0x0c80, 0x10 },
-	{ 0x0c90, 0x10 },
-	{ 0x0ca0, 0x10 },
-	{ 0x0cb0, 0x10 },
-	{ 0x0cc0, 0x10 },
-	{ 0x0cd0, 0x10 },
-	{ 0x0ce0, 0x10 },
-	{ 0x0cf0, 0x10 },
-	{ 0x0d00, 0x10 },
-	{ 0x0d10, 0x10 },
-	{ 0x0d20, 0x10 },
-	{ 0x0d30, 0x10 },
-	{ 0x0d40, 0x10 },
-	{ 0x0d50, 0x10 },
-	{ 0x0d60, 0x80 },
-	{ 0x0de0, 0x50 },
-	{ 0x0e40, 0x28 },
-	{ 0x0ed0, 0x48 },
-	{ 0x1c00, 0x80 },
-	{ 0x1c80, 0x80 },
-	{ 0x0f18, 0x08 },
-	{ 0,      0}
-};
-
-// ************************************************************************
-
-// commands:
-//  0x14 - hello
-//  0x1b - read eeprom
-//  0x1d - write eeprom
-//  0xdd - reset radio
-
-// flash commands:
-//  0x30 - say hello to the radio and present the version (reply is also 0x18)
-//  0x19 - send flash block (reply from radio is 0x1a)
-//
-// from the radio:
-//  0x18 - broadcast from the radio when flash mode is enabled
-
-// CMD_GET_FW_VER    = b'\x14\x05' #0x0514 -> 0x0515
-// CMD_READ_FW_MEM   = b'\x17\x05' #0x0517 -> 0x0518
-// CMD_WRITE_FW_MEM  = b'\x19\x05' #0x0519 -> 0x051a // Only in bootloader
-//
-// CMD_READ_CFG_MEM  = b'\x1B\x05' #0x051B -> 0x051C
-// CMD_WRITE_CFG_MEM = b'\x1D\x05' #0x051D -> 0x051E
-
-const uint8_t session_id[] = {0x6a, 0x39, 0x57, 0x64};
-//const uint8_t session_id[] = {0x46, 0x9c, 0x6f, 0x64};
-
-// ************************************************************************
 
 bool __fastcall getBuildInfo(String filename, TVersion *version)
 {
@@ -653,6 +192,8 @@ void __fastcall TForm1::FormCreate(TObject *Sender)
 	m_thread = NULL;
 
 	m_verbose = VerboseTrackBar->Position;
+
+	memset(m_eeprom, 0, sizeof(m_eeprom));
 
 	m_serial.port_name = "";
 	//m_serial.port;
@@ -2046,13 +1587,14 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 			k5_hdump(rx_data, rx_data_size);
 		}
 
-		if (rx_data_size < (8 + len))
-		{
+		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
+		{	// radio is in firmware update mode
 			clearRxPacket0();		// remove spent packet
-			continue;
+			return -1;
 		}
 
-		if (rx_data[0] != 0x1C ||
+		if (rx_data_size < (8 + len) ||
+			 rx_data[0] != 0x1C ||
 			 rx_data[1] != 0x05 ||
 			 rx_data[4] != buffer[4] ||
 			 rx_data[5] != buffer[5])
@@ -2069,7 +1611,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: k5_read_eeprom() no valid packet received");
+		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -2129,13 +1671,14 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 			k5_hdump(rx_data, rx_data_size);
 		}
 
-		if (rx_data_size < 6)
-		{
+		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
+		{	// radio is in firmware update mode
 			clearRxPacket0();		// remove spent packet
-			continue;
+			return -1;
 		}
 
-		if (rx_data[0] != 0x1E ||
+		if (rx_data_size < 6 ||
+			 rx_data[0] != 0x1E ||
 			 rx_data[1] != 0x05 ||
 			 rx_data[4] != buffer[4] ||
 			 rx_data[5] != buffer[5])
@@ -2150,7 +1693,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: k5_write_eeprom() no valid packet received");
+		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -2201,14 +1744,7 @@ int __fastcall TForm1::k5_wait_flash_message()
 		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		//  0x000020: 00 00 00 20                                       ...
 
-		if (rx_data_size < 36  ||
-			 rx_data[0] != 0x18 ||
-			 rx_data[1] != 0x05 ||
-			 rx_data[2] != 32   ||
-			 rx_data[3] != 0x00 ||
-			 rx_data[4] != 0x01 ||
-			 rx_data[5] != 0x02 ||
-			 rx_data[6] != 0x02)
+		if (rx_data_size < 36  || rx_data[0] != 0x18 ||  rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2239,7 +1775,7 @@ int __fastcall TForm1::k5_wait_flash_message()
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: wait_flash_message() no valid packet received");
+		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -2295,24 +1831,12 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 			k5_hdump(rx_data, rx_data_size);
 		}
 
-		if (rx_data_size < 36)
-		{
-			clearRxPacket0();		// remove spent packet
-			continue;
-		}
-
 		// expect to see ..
 		//  0x000000: 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
 		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		//  0x000020: 00 00 00 20                                       ...
 
-		if (rx_data[0] != 0x18 ||
-			 rx_data[1] != 0x05 ||
-			 rx_data[2] != 32 ||
-			 rx_data[3] != 0x00 ||
-			 rx_data[4] != 0x01 ||
-			 rx_data[5] != 0x02 ||
-			 rx_data[6] != 0x02)
+		if (rx_data_size < 36 || rx_data[0] != 0x18 || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2324,7 +1848,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: k5_send_flash_version_message() no valid packet received");
+		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -2462,7 +1986,7 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: k5_write_flash() no valid packet received");
+		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -2549,7 +2073,208 @@ int __fastcall TForm1::k5_hello()
 	}
 
 	if (m_verbose > 1)
-		Memo1->Lines->Add("error: k5_hello() no valid packet received");
+		Memo1->Lines->Add("error: no valid packet received");
+
+	return 0;
+}
+
+int __fastcall TForm1::k5_readADC()
+{
+	String s;
+	uint8_t buffer[8];
+
+	if (!m_serial.port.connected)
+		return 0;
+
+	m_firmware_ver = "";
+
+	// 'hello' packet
+	buffer[0] = 0x29;
+	buffer[1] = 0x05;
+	buffer[2] = 4;
+	buffer[3] = 0x00;
+
+	memcpy(&buffer[4], session_id, 4);
+
+	if (m_verbose > 0)
+	{
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("sending k5_readADC ..");
+		Memo1->Update();
+	}
+
+	const int r = k5_send_buf(buffer, sizeof(buffer));
+	if (r <= 0)
+		return 0;
+
+	// wait for a rx'ed packet
+	const DWORD tick = GetTickCount();
+	while ((GetTickCount() - tick) <= 1000 && m_serial.port.connected)
+	{
+		if (m_thread->Sync)
+			Application->ProcessMessages();
+		else
+			Sleep(1);
+
+		if (m_rx_packet_queue.empty())
+			continue;
+
+		// fetch the rx'ed packet
+		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
+
+		// 2A 05 04 00 AC 07 00 00
+		
+		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
+			k5_hdump(rx_data, rx_data_size);
+		}
+
+		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
+		{	// radio is in firmware update mode
+			clearRxPacket0();		// remove spent packet
+			return -1;
+		}
+
+		if (rx_data[0] != 0x2A || rx_data[1] != 0x05)
+		{
+			clearRxPacket0();		// remove spent packet
+			continue;
+		}
+
+		if (rx_data_size < 8)
+		{
+			clearRxPacket0();		// remove spent packet
+			continue;
+		}
+
+		const uint16_t adc = ((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0);
+
+		const unsigned int adc_ref_addr = 0x1F40 + (sizeof(uint16_t) * 3);
+		const uint16_t adc_ref = ((uint16_t)m_eeprom[adc_ref_addr + 1] << 8) | ((uint16_t)m_eeprom[adc_ref_addr + 0] << 0);
+
+		// battery calibration
+		// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
+		//
+		//             ADC     V = (7.6 * ADC) / [3]
+		// [0] 04DE .. 1246 .. 5.021V .. empty battery
+		// [1] 06FA .. 1786 .. 7.197V .. 1 bar
+		// [2] 0745 .. 1861 .. 7.499V .. 2 bar
+		// [3] 075E .. 1886 .. 7.600V .. 3 bar
+		// [4] 07C5 .. 1989 .. 8.015V .. 4 bar
+		// [5] 08FC .. 2300 .. 9.268V .. overwritten by radio to 2300
+		// [6] FFFF
+		// [7] FFFF
+		//
+		// actual bat volt = (7.6 * ADC) / [3]
+
+		if (adc_ref > 1000 && adc_ref < 2300)
+			s.printf("battery ADC 0x%04X %u %0.3fV", adc, adc, (7.6f * adc) / adc_ref);
+		else
+			s.printf("battery ADC 0x%04X %u", adc, adc);
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add(s);
+
+		clearRxPacket0();			// remove spent packet
+
+		return 1 + adc;
+	}
+
+	if (m_verbose > 1)
+		Memo1->Lines->Add("error: no valid packet received");
+
+	return 0;
+}
+
+int __fastcall TForm1::k5_readRSSI()
+{
+	String s;
+	uint8_t buffer[8];
+
+	if (!m_serial.port.connected)
+		return 0;
+
+	m_firmware_ver = "";
+
+	// 'hello' packet
+	buffer[0] = 0x27;
+	buffer[1] = 0x05;
+	buffer[2] = 4;
+	buffer[3] = 0x00;
+
+	memcpy(&buffer[4], session_id, 4);
+
+	if (m_verbose > 0)
+	{
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("sending k5_readRSSI ..");
+		Memo1->Update();
+	}
+
+	const int r = k5_send_buf(buffer, sizeof(buffer));
+	if (r <= 0)
+		return 0;
+
+	// wait for a rx'ed packet
+	const DWORD tick = GetTickCount();
+	while ((GetTickCount() - tick) <= 1000 && m_serial.port.connected)
+	{
+		if (m_thread->Sync)
+			Application->ProcessMessages();
+		else
+			Sleep(1);
+
+		if (m_rx_packet_queue.empty())
+			continue;
+
+		// fetch the rx'ed packet
+		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
+
+		// 28 05 04 00 8E 00 50 42
+
+		if (m_verbose > 2)
+		{
+			Memo1->Lines->Add("rx ..");
+			k5_hdump(rx_data, rx_data_size);
+		}
+
+		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
+		{	// radio is in firmware update mode
+			clearRxPacket0();		// remove spent packet
+			return -1;
+		}
+
+		if (rx_data[0] != 0x28 || rx_data[1] != 0x05)
+		{
+			clearRxPacket0();		// remove spent packet
+			continue;
+		}
+
+		if (rx_data_size < 8)
+		{
+			clearRxPacket0();		// remove spent packet
+			continue;
+		}
+
+		const uint16_t rssi_raw  = ((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0);
+		const uint8_t noise_raw  = rx_data[6];
+		const uint8_t glitch_raw = rx_data[7];
+
+		const int rssi = ((int)rssi_raw / 2) - 160;
+
+		s.printf("RSSI 0x%04X %d, Noise 0x%02X %u, Glitch 0x%02X %u", rssi_raw, rssi, noise_raw, noise_raw, glitch_raw, glitch_raw);
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add(s);
+
+		clearRxPacket0();			// remove spent packet
+
+		return 1;
+	}
+
+	if (m_verbose > 1)
+		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -2583,9 +2308,9 @@ void __fastcall TForm1::VerboseTrackBarChange(TObject *Sender)
 void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 {
 	String  s;
-	uint8_t eeprom[UVK5_MAX_EEPROM_SIZE];
 
-	disconnect();
+	if (m_serial.port.connected)
+		return;
 
 	// *******************************************
 	// download the radios configuration data
@@ -2616,6 +2341,14 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
+	if (r == 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("is the radio turned on ?");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
 	if (r < 0)
 	{
 		disconnect();
@@ -2624,15 +2357,11 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
-	if (r == 0)
-	{	// no valid reply
-		disconnect();
-		SerialPortComboBoxChange(NULL);
-		return;
-	}
 
-	const int size      = sizeof(eeprom);
+	const int size      = sizeof(m_eeprom);
 	const int block_len = UVK5_EEPROM_BLOCKSIZE;
+
+	memset(m_eeprom, 0, sizeof(m_eeprom));
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
@@ -2640,7 +2369,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	for (unsigned int i = 0; i < size; i += block_len)
 	{
-		r = k5_read_eeprom(&eeprom[i], block_len, i);
+		r = k5_read_eeprom(&m_eeprom[i], block_len, i);
 		if (r <= 0)
 		{
 			s.printf("error: k5_read_eeprom() [%d]", r);
@@ -2674,7 +2403,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	{	// show the eeprom contents
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
-		k5_hdump(&eeprom[0], size);
+		k5_hdump(&m_eeprom[0], size);
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
 		Memo1->Update();
@@ -2696,7 +2425,24 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		name += ext;
 	}
 
-	saveFile(name, &eeprom[0], size);
+	saveFile(name, &m_eeprom[0], size);
+
+	// *******************************************
+
+	// battery calibration
+	// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
+	//
+	//             ADC     V = (760 * ADC) / [3] / 100
+	// [0] 04DE .. 1246 .. 5.021V .. empty battery
+	// [1] 06FA .. 1786 .. 7.197V .. 1 bar
+	// [2] 0745 .. 1861 .. 7.499V .. 2 bar
+	// [3] 075E .. 1886 .. 7.600V .. 3 bar
+	// [4] 07C5 .. 1989 .. 8.015V .. 4 bar
+	// [5] 08FC .. 2300 .. 9.268V .. overwritten by radio to 2300
+	// [6] FFFF
+	// [7] FFFF
+	//
+	// actual bat volt = (760 * ADC) / [3] / 100
 
 	// *******************************************
 }
@@ -2706,7 +2452,8 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	String s;
 	uint8_t flash[UVK5_MAX_FLASH_SIZE];
 
-	disconnect();
+	if (m_serial.port.connected)
+		return;
 
 	// *******************************************
 	// load the firmware file in
@@ -2904,20 +2651,19 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			Application->ProcessMessages();
 		}
 		Memo1->Lines->Add("");
+		if (r == 0)
+		{
+			disconnect();
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("is the radio turned on ?");
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
 		if (r > 0)
 		{
 			disconnect();
 			Memo1->Lines->Add("");
 			Memo1->Lines->Add("error: radio is not in firmware update mode - turn the radio off, then back on whilst pressing the PTT");
-			SerialPortComboBoxChange(NULL);
-			return;
-		}
-		else
-		if (r == 0)
-		{
-			disconnect();
-			Memo1->Lines->Add("");
-			Memo1->Lines->Add("error: radio is not in firmware update mode - turn radio on whilst pressing the PTT");
 			SerialPortComboBoxChange(NULL);
 			return;
 		}
@@ -3000,7 +2746,8 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 {
 	String s;
 
-	disconnect();
+	if (m_serial.port.connected)
+		return;
 
 	// *******************************************
 	// load the configuration file in
@@ -3109,17 +2856,19 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
+	if (r == 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("is the radio turned on ?");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
 	if (r < 0)
 	{
 		disconnect();
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
-		SerialPortComboBoxChange(NULL);
-		return;
-	}
-	if (r == 0)
-	{
-		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
@@ -3193,5 +2942,104 @@ void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
 	ReadEEPROMButton->Enabled    = SerialPortComboBox->ItemIndex > 0;
 	WriteEEPROMButton->Enabled   = SerialPortComboBox->ItemIndex > 0;
 	WriteFirmwareButton->Enabled = SerialPortComboBox->ItemIndex > 0;
+}
+
+void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
+{
+	String s;
+
+	if (m_serial.port.connected)
+		return;
+
+	Memo1->Lines->Add("");
+
+	if (!connect(false))
+		return;
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Reading ADC ..");
+	Memo1->Update();
+
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
+
+	int r = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		r = k5_readADC();
+		if (r != 0)
+			break;
+		Application->ProcessMessages();
+	}
+	Memo1->Lines->Add("");
+	if (r == 0)
+	{	// nothing valid received
+		disconnect();
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+	if (r < 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+
+	disconnect();
+
+	SerialPortComboBoxChange(NULL);
+}
+
+
+void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
+{
+	String s;
+
+	if (m_serial.port.connected)
+		return;
+
+	Memo1->Lines->Add("");
+
+	if (!connect(false))
+		return;
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Reading RSSI ..");
+	Memo1->Update();
+
+	ReadEEPROMButton->Enabled    = false;
+	WriteEEPROMButton->Enabled   = false;
+	WriteFirmwareButton->Enabled = false;
+
+	int r = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		r = k5_readRSSI();
+		if (r != 0)
+			break;
+		Application->ProcessMessages();
+	}
+	Memo1->Lines->Add("");
+	if (r == 0)
+	{	// nothing valid received
+		disconnect();
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+	if (r < 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+
+	disconnect();
+
+	SerialPortComboBoxChange(NULL);
 }
 
