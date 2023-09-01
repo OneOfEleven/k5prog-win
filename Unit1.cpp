@@ -782,29 +782,39 @@ void __fastcall TForm1::threadProcess()
 	if (m_serial.rx_buffer_wr > 0 && m_serial.rx_timer.millisecs() >= 5000)
 		m_serial.rx_buffer_wr = 0;		// no data rx'ed fro 2 seconds .. empty the rx buffer
 
-	while (m_serial.rx_buffer_wr >= 4)   // '4' is the very minimum packet size
+	while (m_serial.rx_buffer_wr >= 8)   // '8' is the very minimum packet size
 	{
-		if (m_serial.rx_buffer[0] != 0xAB || m_serial.rx_buffer[1] != 0xCD || m_serial.rx_buffer[2] == 0 || m_serial.rx_buffer[3] != 0x00)
+		if (m_serial.rx_buffer[0] != 0xAB || m_serial.rx_buffer[1] != 0xCD)
 		{
-			// scan for the start byte
+			// scan for a start byte
 			int i = 1;
 			while (m_serial.rx_buffer[i] != 0xAB && i < (int)m_serial.rx_buffer_wr)
 				i++;
 
 			if (i < (int)m_serial.rx_buffer_wr)
-			{	// possible start byte found - remove everything before it
+			{	// possible start byte found - remove all rx'ed bytes before it
 				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[i], m_serial.rx_buffer_wr - i);
 				m_serial.rx_buffer_wr -= i;
 			}
 			else
-			{	// no start byte found
+			{	// no start byte found - remove all rx'ed bytes
 				m_serial.rx_buffer_wr = 0;
 			}
 
 			continue;
 		}
 
-		const int data_len   = m_serial.rx_buffer[2];    // byte[2] is the payload size
+		// fetch the payload size
+		const int data_len   = ((uint16_t)m_serial.rx_buffer[3] << 8) | ((uint16_t)m_serial.rx_buffer[2] << 0);
+		if (data_len > 270)
+		{	// too big .. assume it's an error
+			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
+			m_serial.rx_buffer_wr--;
+			continue;
+		}
+
+		// complete packet length
+		// includes the 4-byte header, payload, 2-byte CRC and 2-byte footer
 		const int packet_len = 4 + data_len + 2 + 2;
 
 		if ((int)m_serial.rx_buffer_wr < packet_len)
@@ -1253,7 +1263,6 @@ void __fastcall TForm1::k5_hdump(const uint8_t *buf, const int len)
 	#endif
 }
 
-// hexdump a k5_command struct
 void __fastcall TForm1::k5_hex_dump(const struct k5_command *cmd)
 {
 	String s;
@@ -1744,12 +1753,11 @@ int __fastcall TForm1::k5_wait_flash_message()
 			k5_hdump(rx_data, rx_data_size);
 		}
 
-		// expect to see ..
-		//  0x000000: 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
-		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
-		//  0x000020: 00 00 00 20                                       ...
+		// 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
+		// 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
+		// 00 00 00 20                                       ...
 
-		if (rx_data_size < 36  || rx_data[0] != 0x18 ||  rx_data[1] != 0x05)
+		if (rx_data_size < 36 || rx_data[0] != 0x18 || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -1836,10 +1844,9 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 			k5_hdump(rx_data, rx_data_size);
 		}
 
-		// expect to see ..
-		//  0x000000: 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
-		//  0x000010: 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
-		//  0x000020: 00 00 00 20                                       ...
+		// 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
+		// 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
+		// 00 00 00 20                                       ...
 
 		if (rx_data_size < 36 || rx_data[0] != 0x18 || rx_data[1] != 0x05)
 		{
@@ -1876,7 +1883,6 @@ int __fastcall TForm1::k5_read_flash(uint8_t *buf, const int len, const int offs
 
 	memset(buffer, 0, sizeof(buffer));
 
-	// 0x19 0x05 0x0c 0x01 0x8a 0x8d 0x9f 0x1d
 	buffer[ 0] = 0x17;
 	buffer[ 1] = 0x05;
 //	buffer[ 2] = 0x0C;      // bytes 2, 3: length is 0x010C (12 + 256)
