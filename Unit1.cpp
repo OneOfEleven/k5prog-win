@@ -2229,7 +2229,7 @@ int __fastcall TForm1::k5_readRSSI()
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
 	while ((GetTickCount() - tick) <= 1000 && m_serial.port.connected)
-	{                    
+	{
 		if (m_thread->Sync)
 			Application->ProcessMessages();
 		else
@@ -2332,15 +2332,13 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	if (!connect(false))
 		return;
 
+	SerialPortComboBoxChange(NULL);
+
 	m_firmware_ver = "";
 
 	Memo1->Lines->Add("");
 	Memo1->Lines->Add("Downloading configuration data from the radio ..");
 	Memo1->Update();
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
@@ -2641,13 +2639,11 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	if (!connect(false))
 		return;
 
+	SerialPortComboBoxChange(NULL);
+
 	Memo1->Lines->Add("");
 	Memo1->Lines->Add("Uploading firmware to the radio ..");
 	Memo1->Update();
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	int r = k5_wait_flash_message();
 	if (r <= 0)
@@ -2734,7 +2730,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	k5_reboot();
 
 	// give the serial port time to complete the data TX
-	Sleep(50);
+	Sleep(100);
 
 	Memo1->Lines->Add("");
 
@@ -2841,13 +2837,11 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	if (!connect(false))
 		return;
 
+	SerialPortComboBoxChange(NULL);
+
 	Memo1->Lines->Add("");
 	Memo1->Lines->Add("Uploading configuration data to the radio ..");
 	Memo1->Update();
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
@@ -2886,10 +2880,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("writing eeprom area ..");
 
-//	int size = 0;
-//	while (uvk5_writes[size][1] > 0)
-//		size++;
-
 	int size = m_loadfile_data.size();
 
 	CGauge1->MaxValue = size;
@@ -2898,11 +2888,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	for (int i = 0; i < size; i += UVK5_EEPROM_BLOCKSIZE)
 	{
-//		const int addr = uvk5_writes[i][0];
-//		const int len  = uvk5_writes[i][1];
-//		if (len <= 0)
-//			break;
-
 		const int addr = i;
 		const int len  = UVK5_EEPROM_BLOCKSIZE;
 
@@ -2940,9 +2925,16 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
 {
-	ReadEEPROMButton->Enabled    = SerialPortComboBox->ItemIndex > 0;
-	WriteEEPROMButton->Enabled   = SerialPortComboBox->ItemIndex > 0;
-	WriteFirmwareButton->Enabled = SerialPortComboBox->ItemIndex > 0;
+	const bool enabled = !m_serial.port.connected && (SerialPortComboBox->ItemIndex > 0);
+
+	ReadEEPROMButton->Enabled    = enabled;
+	WriteEEPROMButton->Enabled   = enabled;
+	WriteFirmwareButton->Enabled = enabled;
+	ReadADCButton->Enabled       = enabled;
+	ReadRSSIButton->Enabled      = enabled;
+
+	SerialPortComboBox->Enabled  = !m_serial.port.connected;
+	SerialSpeedComboBox->Enabled = !m_serial.port.connected;
 }
 
 void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
@@ -2957,13 +2949,11 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 	if (!connect(false))
 		return;
 
+	SerialPortComboBoxChange(NULL);
+
 	Memo1->Lines->Add("");
 	Memo1->Lines->Add("Reading ADC ..");
 	Memo1->Update();
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 
@@ -3005,10 +2995,11 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 		return;
 	}
 
+
+
 	disconnect();
 	SerialPortComboBoxChange(NULL);
 }
-
 
 void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 {
@@ -3022,13 +3013,11 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 	if (!connect(false))
 		return;
 
+	SerialPortComboBoxChange(NULL);
+
 	Memo1->Lines->Add("");
 	Memo1->Lines->Add("Reading RSSI ..");
 	Memo1->Update();
-
-	ReadEEPROMButton->Enabled    = false;
-	WriteEEPROMButton->Enabled   = false;
-	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
 
@@ -3069,6 +3058,8 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
+
+
 
 	disconnect();
 	SerialPortComboBoxChange(NULL);
