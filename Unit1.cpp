@@ -56,10 +56,8 @@ TForm1 *Form1 = NULL;
 // 0x0519 .. write flash block .. only in firmware update mode
 // 0x051B .. read configuration block
 // 0x051D .. write configuration block
-// 0x051F ..
-// 0x0521 ..
 // 0x0527 .. read RSSI, noise and glitch
-// 0x0529 .. read battery ADC value
+// 0x0529 .. read battery ADC voltage and current values
 // 0x052D ..
 // 0x052F ..
 // 0x0530 .. send firmware version .. only in firmware update mode
@@ -1628,7 +1626,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int offset)
 {
 	String  s;
-	uint8_t buffer[4 + 4 + 4 + 128];
+	uint8_t buffer[4 + 8 + 128];
 
 	if (!m_serial.port.connected || buf == NULL || len <= 0 || len > 128)
 		return 0;
@@ -1645,21 +1643,16 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 	buffer[2] = ((8 + len) >> 0) & 0xff;   // LS-Byte size
 	buffer[3] = ((8 + len) >> 8) & 0xff;   // MS-Byte size
 
-	buffer[0] = 0x1D;
-	buffer[1] = 0x05;
-	buffer[2] = 8 + len;
-	buffer[3] = 0x00;
-
-	buffer[4] = (offset >> 0) & 0xff;   // addr LS-Byte
-	buffer[5] = (offset >> 8) & 0xff;   // addr MS-Byte
-	buffer[6] = len;                    // len
-	buffer[7] = 0x01;                   // ?
+	buffer[4] = (offset >> 0) & 0xff;      // addr LS-Byte
+	buffer[5] = (offset >> 8) & 0xff;      // addr MS-Byte
+	buffer[6] = len;                       // length
+	buffer[7] = 0x01;                      // allow password
 
 	memcpy(&buffer[8], session_id, 4);
 
-	memcpy(&buffer[12], buf, len);
+	memcpy(&buffer[4 + 8], buf, len);
 
-	const int r = k5_send_buf(buffer, 4 + 4 + 4 + len);
+	const int r = k5_send_buf(buffer, 4 + 8 + len);
 	if (r <= 0)
 		return 0;
 
@@ -1896,7 +1889,7 @@ int __fastcall TForm1::k5_read_flash(uint8_t *buf, const int len, const int offs
 int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const int offset, const int firmware_size)
 {
 	String s;
-	uint8_t buffer[16 + 256];
+	uint8_t buffer[4 + 12 + 256];
 
 	if (!m_serial.port.connected || buf == NULL || len <= 0 || len > 256)
 		return 0;
@@ -1912,8 +1905,8 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 
 	buffer[ 0] = 0x19;                      // LS-Byte command
 	buffer[ 1] = 0x05;                      // MS-Byte command
-	buffer[ 2] = ((256 + 12) >> 0) & 0xff;  // LS-Byte size
-	buffer[ 3] = ((256 + 12) >> 8) & 0xff;  // MS-Byte size
+	buffer[ 2] = ((12 + 256) >> 0) & 0xff;  // LS-Byte size
+	buffer[ 3] = ((12 + 256) >> 8) & 0xff;  // MS-Byte size
 
 	buffer[ 4] = 0x8A;
 	buffer[ 5] = 0x8D;
@@ -1960,12 +1953,6 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 			k5_hdump(rx_data, rx_data_size);
 		}
 
-		if (rx_data_size < 12)
-		{
-			clearRxPacket0();		// remove spent packet
-			continue;
-		}
-
 		// good replies:
 		// 1A 05 08 00 8A 8D 9F 1D 00 00 00 00
 		// 1A 05 08 00 8A 8D 9F 1D 01 00 00 00
@@ -1976,7 +1963,8 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 		// 1A 05 08 00 00 00 00 00 00 00 01 00
 		// 1A 05 08 00 00 00 00 00 00 00 01 00
 
-		if (rx_data[0] != 0x1A ||
+		if (rx_data_size < 12 ||
+			 rx_data[0] != 0x1A ||
 			 rx_data[1] != 0x05 ||
 			 rx_data[2] != 8 ||
 			 rx_data[3] != 0x00 ||
@@ -2004,13 +1992,16 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 
 int __fastcall TForm1::k5_hello()
 {
-//	String s;
+	String s;
 	uint8_t buffer[8];
 
 	if (!m_serial.port.connected)
 		return 0;
 
-	m_firmware_ver = "";
+	m_firmware_ver       = "";
+	m_has_custom_AES_key = false;
+	m_is_in_lock_screen  = false;
+	memset(m_challenge, 0, sizeof(m_challenge));
 
 	buffer[0] = 0x14;                      // LS-Byte command
 	buffer[1] = 0x05;                      // MS-Byte command
@@ -2063,13 +2054,7 @@ int __fastcall TForm1::k5_hello()
 			return -1;
 		}
 
-		if (rx_data[0] != 0x15 || rx_data[1] != 0x05)
-		{
-			clearRxPacket0();		// remove spent packet
-			continue;
-		}
-
-		if (rx_data_size < (4 + 16 + 2))
+		if (rx_data_size < (4 + 16 + 2 + 2 + sizeof(m_challenge)) || rx_data[0] != 0x15 || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2079,11 +2064,25 @@ int __fastcall TForm1::k5_hello()
 		memcpy(buf, &rx_data[4], 16);
 		m_firmware_ver = String(buf);
 
-//		const bool has_custom_AES_key = rx_data[4 + 16 + 0];
-//		const bool is_in_lock_screen  = rx_data[4 + 16 + 1];
+		m_has_custom_AES_key = rx_data[4 + 16 + 0];
+		m_is_in_lock_screen  = rx_data[4 + 16 + 1];
+
+		memcpy(m_challenge, &rx_data[4 + 16 + 2 + 2], sizeof(m_challenge));
 
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("firmware version '" + m_firmware_ver + "'");
+		Memo1->Lines->Add("  firmware version: '" + m_firmware_ver + "'");
+		s.printf("has custom AES key: %s", m_has_custom_AES_key ? "yes" : "no");
+		Memo1->Lines->Add(s);
+		s.printf(" is in lock screen: %s", m_is_in_lock_screen ? "yes" : "no");
+		Memo1->Lines->Add(s);
+		s = "         challenge: ";
+		for (size_t i = 0; i < sizeof(m_challenge); i++)
+		{
+			String s2;
+			s2.printf("%02X ", m_challenge[i]);
+			s += s2;
+		}
+		Memo1->Lines->Add(s.TrimRight());
 
 		clearRxPacket0();			// remove spent packet
 
@@ -2103,8 +2102,6 @@ int __fastcall TForm1::k5_readADC()
 
 	if (!m_serial.port.connected)
 		return 0;
-
-	m_firmware_ver = "";
 
 	buffer[0] = 0x29;                      // LS-Byte command
 	buffer[1] = 0x05;                      // MS-Byte command
@@ -2141,7 +2138,7 @@ int __fastcall TForm1::k5_readADC()
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		// 2A 05 04 00 AC 07 00 00
-		
+
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
@@ -2154,24 +2151,19 @@ int __fastcall TForm1::k5_readADC()
 			return -1;
 		}
 
-		if (rx_data[0] != 0x2A || rx_data[1] != 0x05)
+		if (rx_data_size < 8 || rx_data[0] != 0x2A || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
-		if (rx_data_size < 8)
-		{
-			clearRxPacket0();		// remove spent packet
-			continue;
-		}
-
-		const uint16_t adc = ((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0);
+		const uint16_t adc_vol = ((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0);
+		const uint16_t adc_cur = ((uint16_t)rx_data[7] << 8) | ((uint16_t)rx_data[6] << 0);
 
 		const unsigned int adc_ref_addr = 0x1F40 + (sizeof(uint16_t) * 3);
 		const uint16_t adc_ref = ((uint16_t)m_eeprom[adc_ref_addr + 1] << 8) | ((uint16_t)m_eeprom[adc_ref_addr + 0] << 0);
 
-		// battery calibration
+		// battery calibration data in the config/eeprom area
 		// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
 		//
 		//             ADC     V = (7.6 * ADC) / [3]
@@ -2184,18 +2176,21 @@ int __fastcall TForm1::k5_readADC()
 		// [6] FFFF
 		// [7] FFFF
 		//
-		// actual bat volt = (7.6 * ADC) / [3]
+		// actual battery voltage = (7.6 * ADC) / [3]
+		//
+		// once voltage falls to 6.6V, bat icon flashes and voltage starts rapidly falling
+		// radio turns off at about 5.7V
 
 		if (adc_ref > 1000 && adc_ref < 2300)
-			s.printf("battery ADC 0x%04X %u %0.3fV", adc, adc, (7.6f * adc) / adc_ref);
+			s.printf("battery ADC 0x%04X %u %0.3fV", adc_vol, adc_vol, (7.6f * adc_vol) / adc_ref);
 		else
-			s.printf("battery ADC 0x%04X %u", adc, adc);
+			s.printf("battery ADC 0x%04X %u", adc_vol, adc_vol);
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add(s);
 
 		clearRxPacket0();			// remove spent packet
 
-		return 1 + adc;
+		return 1;
 	}
 
 	if (m_verbose > 1)
@@ -2211,8 +2206,6 @@ int __fastcall TForm1::k5_readRSSI()
 
 	if (!m_serial.port.connected)
 		return 0;
-
-	m_firmware_ver = "";
 
 	buffer[0] = 0x27;                      // LS-Byte command
 	buffer[1] = 0x05;                      // MS-Byte command
@@ -2262,21 +2255,15 @@ int __fastcall TForm1::k5_readRSSI()
 			return -1;
 		}
 
-		if (rx_data[0] != 0x28 || rx_data[1] != 0x05)
+		if (rx_data_size < 8 || rx_data[0] != 0x28 || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
-		if (rx_data_size < 8)
-		{
-			clearRxPacket0();		// remove spent packet
-			continue;
-		}
-
-		const uint16_t rssi_raw  = ((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0);
-		const uint8_t noise_raw  = rx_data[6];
-		const uint8_t glitch_raw = rx_data[7];
+		const uint16_t rssi_raw   = (((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0)) & 0x01FF;
+		const uint8_t  noise_raw  = rx_data[6] & 0x7F;
+		const uint8_t  glitch_raw = rx_data[7];
 
 		const int rssi = ((int)rssi_raw / 2) - 160;
 
@@ -2339,8 +2326,6 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		return;
 
 	SerialPortComboBoxChange(NULL);
-
-	m_firmware_ver = "";
 
 	Memo1->Lines->Add("");
 	Memo1->Lines->Add("Downloading configuration data from the radio ..");

@@ -229,6 +229,9 @@ private:
 
 	String                m_bootloader_ver;
 	String                m_firmware_ver;
+	bool                  m_has_custom_AES_key;
+	bool                  m_is_in_lock_screen;
+	uint8_t               m_challenge[4];
 
 	int                   m_verbose;
 
