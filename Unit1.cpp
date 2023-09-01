@@ -1549,15 +1549,15 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 		Memo1->Update();
 	}
 
-	buffer[0] = 0x1B;
-	buffer[1] = 0x05;
-	buffer[2] = 8;
-	buffer[3] = 0x00;
+	buffer[0] = 0x1B;                     // LS-Byte command
+	buffer[1] = 0x05;                     // MS-Byte command
+	buffer[2] = ((8) >> 0) & 0xff;        // LS-Byte size
+	buffer[3] = ((8) >> 8) & 0xff;        // MS-Byte size
 
-	buffer[4] = (offset >> 0) & 0xff;   // addr LS-Byte
-	buffer[5] = (offset >> 8) & 0xff;   // addr MS-Byte
-	buffer[6] = len;                    // len
-	buffer[7] = 0x00;                   // ?
+	buffer[4] = (offset >> 0) & 0xff;     // LS-Byte addr
+	buffer[5] = (offset >> 8) & 0xff;     // MS-Byte addr
+	buffer[6] = len;                      // len
+	buffer[7] = 0;                        // ?
 
 	memcpy(&buffer[8], session_id, 4);
 
@@ -1630,6 +1630,11 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 		Memo1->Lines->Add(s);
 		Memo1->Update();
 	}
+
+	buffer[0] = 0x1D;                      // LS-Byte command
+	buffer[1] = 0x05;                      // MS-Byte command
+	buffer[2] = ((8 + len) >> 0) & 0xff;   // LS-Byte size
+	buffer[3] = ((8 + len) >> 8) & 0xff;   // MS-Byte size
 
 	buffer[0] = 0x1D;
 	buffer[1] = 0x05;
@@ -1790,10 +1795,10 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 	memset(buffer, 0, sizeof(buffer));
 
-	buffer[0] = 0x30;
-	buffer[1] = 0x05;
-	buffer[2] = 16;
-	buffer[3] = 0x00;
+	buffer[0] = 0x30;                      // LS-Byte command
+	buffer[1] = 0x05;                      // MS-Byte command
+	buffer[2] = ((16) >> 0) & 0xff;        // LS-Byte size
+	buffer[3] = ((16) >> 8) & 0xff;        // MS-Byte size
 
 	strcpy(buffer + 4, ver);
 
@@ -1899,10 +1904,10 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 
 	memset(buffer, 0, sizeof(buffer));
 
-	buffer[ 0] = 0x19;
-	buffer[ 1] = 0x05;
-	buffer[ 2] = 0x0C;      // bytes 2, 3: length is 0x010C (256 + 12)
-	buffer[ 3] = 0x01;
+	buffer[ 0] = 0x19;                      // LS-Byte command
+	buffer[ 1] = 0x05;                      // MS-Byte command
+	buffer[ 2] = ((256 + 12) >> 0) & 0xff;  // LS-Byte size
+	buffer[ 3] = ((256 + 12) >> 8) & 0xff;  // MS-Byte size
 
 	buffer[ 4] = 0x8A;
 	buffer[ 5] = 0x8D;
@@ -2001,11 +2006,10 @@ int __fastcall TForm1::k5_hello()
 
 	m_firmware_ver = "";
 
-	// 'hello' packet
-	buffer[0] = 0x14;
-	buffer[1] = 0x05;
-	buffer[2] = 4;
-	buffer[3] = 0x00;
+	buffer[0] = 0x14;                      // LS-Byte command
+	buffer[1] = 0x05;                      // MS-Byte command
+	buffer[2] = ((4) >> 0) & 0xff;         // LS-Byte size
+	buffer[3] = ((4) >> 8) & 0xff;         // MS-Byte size
 
 	memcpy(&buffer[4], session_id, 4);
 
@@ -2042,6 +2046,11 @@ int __fastcall TForm1::k5_hello()
 			k5_hdump(rx_data, rx_data_size);
 		}
 
+		// reply ..
+		// 000000  15 05 24 00 6B 35 5F 32 2E 30 31 2E 32 36 00 00  ..$.k5_2.01.26..
+		// 000010  E4 E1 00 00 00 00 00 00 42 3D 28 55 36 49 D8 27  ‰·......B=(U6Iÿ'
+		// 000020  51 DF 0C 54 99 DB 2B 7F                          Qﬂ.Tô€+
+
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
 		{	// radio is in firmware update mode
 			clearRxPacket0();		// remove spent packet
@@ -2054,7 +2063,7 @@ int __fastcall TForm1::k5_hello()
 			continue;
 		}
 
-		if (rx_data_size < (4 + 16))
+		if (rx_data_size < (4 + 16 + 2))
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2063,6 +2072,9 @@ int __fastcall TForm1::k5_hello()
 		char buf[17] = {0};
 		memcpy(buf, &rx_data[4], 16);
 		m_firmware_ver = String(buf);
+
+//		const bool has_custom_AES_key = rx_data[4 + 16 + 0];
+//		const bool is_in_lock_screen  = rx_data[4 + 16 + 1];
 
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("firmware version '" + m_firmware_ver + "'");
@@ -2088,11 +2100,10 @@ int __fastcall TForm1::k5_readADC()
 
 	m_firmware_ver = "";
 
-	// 'hello' packet
-	buffer[0] = 0x29;
-	buffer[1] = 0x05;
-	buffer[2] = 4;
-	buffer[3] = 0x00;
+	buffer[0] = 0x29;                      // LS-Byte command
+	buffer[1] = 0x05;                      // MS-Byte command
+	buffer[2] = ((4) >> 0) & 0xff;         // LS-Byte size
+	buffer[3] = ((4) >> 8) & 0xff;         // MS-Byte size
 
 	memcpy(&buffer[4], session_id, 4);
 
@@ -2197,11 +2208,10 @@ int __fastcall TForm1::k5_readRSSI()
 
 	m_firmware_ver = "";
 
-	// 'hello' packet
-	buffer[0] = 0x27;
-	buffer[1] = 0x05;
-	buffer[2] = 4;
-	buffer[3] = 0x00;
+	buffer[0] = 0x27;                      // LS-Byte command
+	buffer[1] = 0x05;                      // MS-Byte command
+	buffer[2] = ((4) >> 0) & 0xff;         // LS-Byte size
+	buffer[3] = ((4) >> 8) & 0xff;         // MS-Byte size
 
 	memcpy(&buffer[4], session_id, 4);
 
@@ -2219,7 +2229,7 @@ int __fastcall TForm1::k5_readRSSI()
 	// wait for a rx'ed packet
 	const DWORD tick = GetTickCount();
 	while ((GetTickCount() - tick) <= 1000 && m_serial.port.connected)
-	{
+	{                    
 		if (m_thread->Sync)
 			Application->ProcessMessages();
 		else
@@ -2286,10 +2296,10 @@ int __fastcall TForm1::k5_reboot()
 	if (!m_serial.port.connected)
 		return 0;
 
-	buffer[0] = 0xDD;
-	buffer[1] = 0x05;
-	buffer[2] = 0;
-	buffer[3] = 0x00;
+	buffer[0] = 0xDD;                      // LS-Byte command
+	buffer[1] = 0x05;                      // MS-Byte command
+	buffer[2] = ((0) >> 0) & 0xff;         // LS-Byte size
+	buffer[3] = ((0) >> 8) & 0xff;         // MS-Byte size
 
 	if (m_verbose > 0)
 	{
@@ -2691,10 +2701,6 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("");
 
-	const int verbose = m_verbose;
-	if (m_verbose > 1)
-		m_verbose = 1;
-
 	CGauge1->MaxValue = m_loadfile_data.size();
 	CGauge1->Progress = 0;
 	CGauge1->Update();
@@ -2711,7 +2717,6 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			s.printf("error: k5_write_flash() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
-			m_verbose = verbose;
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2726,10 +2731,6 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	Memo1->Lines->Add("write FLASH complete");
 	Memo1->Update();
 
-	SerialPortComboBoxChange(NULL);
-
-	m_verbose = verbose;
-
 	k5_reboot();
 
 	// give the serial port time to complete the data TX
@@ -2738,6 +2739,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	Memo1->Lines->Add("");
 
 	disconnect();
+	SerialPortComboBoxChange(NULL);
 
 	// *******************************************
 }
@@ -2910,9 +2912,8 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 			s.printf("error: k5_write_eeprom() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
-			Memo1->Update();
-			SerialPortComboBoxChange(NULL);
 			disconnect();
+			SerialPortComboBoxChange(NULL);
 			return;
 		}
 
@@ -2965,31 +2966,46 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
-	for (int i = 0; i < 3; i++)
+
+#if 0
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
-		r = k5_readADC();
+		r = k5_hello();
 		if (r != 0)
 			break;
 		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
 	if (r == 0)
-	{	// nothing valid received
+	{
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("is the radio turned on ?");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
 	if (r < 0)
 	{
-		disconnect();
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		disconnect();
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+#endif
+
+	r = k5_readADC();
+	if (r <= 0)
+	{
+		s.printf("error: k5_readADC() [%d]", r);
+		Memo1->Lines->Add(s);
+		Memo1->Lines->Add("");
+		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
 
 	disconnect();
-
 	SerialPortComboBoxChange(NULL);
 }
 
@@ -3015,31 +3031,46 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 	WriteFirmwareButton->Enabled = false;
 
 	int r = 0;
-	for (int i = 0; i < 3; i++)
+
+#if 0
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
-		r = k5_readRSSI();
+		r = k5_hello();
 		if (r != 0)
 			break;
 		Application->ProcessMessages();
 	}
 	Memo1->Lines->Add("");
 	if (r == 0)
-	{	// nothing valid received
+	{
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("is the radio turned on ?");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
 	if (r < 0)
 	{
-		disconnect();
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		disconnect();
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+#endif
+
+	r = k5_readRSSI();
+	if (r <= 0)
+	{
+		s.printf("error: k5_readRSSI() [%d]", r);
+		Memo1->Lines->Add(s);
+		Memo1->Lines->Add("");
+		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
 
 	disconnect();
-
 	SerialPortComboBoxChange(NULL);
 }
 
