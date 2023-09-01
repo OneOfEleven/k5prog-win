@@ -886,7 +886,7 @@ void __fastcall TForm1::threadProcess()
 			{	// we have a payload to save
 
 				// drop the 16-bit CRC off the end
-				rx_data.resize(data_len);
+				//rx_data.resize(data_len);
 
 				// append the RX'ed payload onto the RX queue
 				if (m_rx_packet_queue.size() < 4)    // don't bother saving any more than 4 packets/payloads, the radios bootloader sends continuously when in firmware update mode
@@ -1309,11 +1309,15 @@ void __fastcall TForm1::k5_hex_dump2(const struct k5_command *cmd, const bool tx
 	if (cmd->cmd != NULL)
 	{
 		s.printf("%s clear      [%3d]             ", tx ? "tx" : "rx", cmd->len);
-		//for (int i = 0; i < cmd->len; i++)
-		for (int i = 0; i < (cmd->len + 2); i++)   // also show the 2 CRC bytes
+		for (int i = 0; i < cmd->len; i++)
 		{
 			String s2;
 			s2.printf("%02X ", cmd->cmd[i]);
+			s += s2;
+		}
+		{
+			String s2;
+			s2.printf("- %04X", cmd->crc_clear);
 			s += s2;
 		}
 		Memo1->Lines->Add(s.Trim());
@@ -1359,8 +1363,6 @@ void __fastcall TForm1::k5_xor_payload(uint8_t *data, const int len)
 
 int __fastcall TForm1::k5_obfuscate(struct k5_command *cmd)
 {
-	uint16_t c;
-
 	if (cmd == NULL)
 		return 0;
 
@@ -1384,9 +1386,10 @@ int __fastcall TForm1::k5_obfuscate(struct k5_command *cmd)
 
 	memcpy(cmd->obfuscated_cmd + 4, cmd->cmd, cmd->len);
 
-	c = crc16(cmd->obfuscated_cmd + 4, cmd->len);
-	cmd->obfuscated_cmd[cmd->len + 4] = (c >> 0) & 0xff;
-	cmd->obfuscated_cmd[cmd->len + 5] = (c >> 8) & 0xff;
+	// add the CRC
+	cmd->crc_clear = crc16(cmd->obfuscated_cmd + 4, cmd->len);
+	cmd->obfuscated_cmd[cmd->len + 4] = (cmd->crc_clear >> 0) & 0xff;
+	cmd->obfuscated_cmd[cmd->len + 5] = (cmd->crc_clear >> 8) & 0xff;
 
 	k5_xor_payload(cmd->obfuscated_cmd + 4, cmd->len + 2);
 
@@ -1450,6 +1453,9 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 	// de-obfuscate
 	k5_xor_payload(cmd->cmd, cmd->len);
 
+	// save the decrypted CRC
+	cmd->crc_clear = ((uint8_t)cmd->cmd[cmd->len - 1] << 8) | ((uint8_t)cmd->cmd[cmd->len - 2] << 0);
+
 	if (m_verbose > 2)
 	{
 		s.printf("de-obfuscate [%d]:", cmd->len);
@@ -1461,14 +1467,12 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 	}
 
 	const uint16_t crc1 = crc16(cmd->cmd, cmd->len - 2);
-	const uint16_t crc2 = ((uint16_t)cmd->cmd[cmd->len - 1] << 8) | ((uint16_t)cmd->cmd[cmd->len - 2] << 0);
+	const uint16_t crc2 = cmd->crc_clear;
 
-	//if ((*cmd->cmd[*cmd->cmd - 2] == ((c << 0) & 0xff)) && (*cmd->cmd[*cmd->cmd - 2] == ((c << 8) & 0xff)))
-	// the protocol looks like it would use crc from the radio to the pc, but instead the radio sends 0xffff
 	if (crc2 == 0xffff)
 	{
 		cmd->crc_ok = 1;
-		cmd->len -= 2;    // skip crc
+		cmd->len -= 2;    // drop the CRC
 		return 1;
 	}
 
@@ -1476,6 +1480,10 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 	{
 		Memo1->Lines->Add("* the protocol actually uses proper crc on datagrams from the radio, please inform the author of the radio/firmware version");
 		k5_hex_dump(cmd);
+
+		cmd->crc_ok = 1;
+		cmd->len -= 2;    // drop the CRC
+		return 1;
 	}
 
 	cmd->crc_ok = 0;
@@ -1487,7 +1495,7 @@ int __fastcall TForm1::k5_deobfuscate(struct k5_command *cmd)
 		k5_hex_dump(cmd);
 	}
 
-	cmd->len -= 2;    // skip crc
+	cmd->len -= 2;    	// drop the CRC
 
 	return 0;
 }
@@ -1585,13 +1593,13 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 			continue;
 
 		// fetch the rx'ed packet
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
@@ -1737,13 +1745,13 @@ int __fastcall TForm1::k5_wait_flash_message()
 			continue;
 
 		// fetch the rx'ed packet
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		// 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
@@ -1828,13 +1836,13 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 			continue;
 
 		// fetch the rx'ed packet
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		// 18 05 20 00 01 02 02 06 1c 53 50 4a 37 47 ff 0f   .. ......SPJ7G..
@@ -1944,13 +1952,13 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 			continue;
 
 		// fetch the 1st packet in the queue
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		// good replies:
@@ -2034,13 +2042,13 @@ int __fastcall TForm1::k5_hello()
 			continue;
 
 		// fetch the rx'ed packet
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		// reply ..
@@ -2134,7 +2142,7 @@ int __fastcall TForm1::k5_readADC()
 			continue;
 
 		// fetch the rx'ed packet
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		// 2A 05 04 00 AC 07 00 00
@@ -2142,7 +2150,7 @@ int __fastcall TForm1::k5_readADC()
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
@@ -2158,7 +2166,7 @@ int __fastcall TForm1::k5_readADC()
 		}
 
 		const uint16_t adc_vol = ((uint16_t)rx_data[5] << 8) | ((uint16_t)rx_data[4] << 0);
-		const uint16_t adc_cur = ((uint16_t)rx_data[7] << 8) | ((uint16_t)rx_data[6] << 0);
+//		const uint16_t adc_cur = ((uint16_t)rx_data[7] << 8) | ((uint16_t)rx_data[6] << 0);
 
 		const unsigned int adc_ref_addr = 0x1F40 + (sizeof(uint16_t) * 3);
 		const uint16_t adc_ref = ((uint16_t)m_eeprom[adc_ref_addr + 1] << 8) | ((uint16_t)m_eeprom[adc_ref_addr + 0] << 0);
@@ -2238,7 +2246,7 @@ int __fastcall TForm1::k5_readRSSI()
 			continue;
 
 		// fetch the rx'ed packet
-		const int      rx_data_size = m_rx_packet_queue[0].size();
+		const int      rx_data_size = m_rx_packet_queue[0].size() - 2;
 		const uint8_t *rx_data      = &m_rx_packet_queue[0][0];
 
 		// 28 05 04 00 8E 00 50 42
@@ -2246,7 +2254,7 @@ int __fastcall TForm1::k5_readRSSI()
 		if (m_verbose > 2)
 		{
 			Memo1->Lines->Add("rx ..");
-			k5_hdump(rx_data, rx_data_size);
+			k5_hdump(rx_data, rx_data_size + 2);
 		}
 
 		if (rx_data[0] == 0x18 && rx_data[1] == 0x05)
@@ -2265,9 +2273,9 @@ int __fastcall TForm1::k5_readRSSI()
 		const uint8_t  noise_raw  = rx_data[6] & 0x7F;
 		const uint8_t  glitch_raw = rx_data[7];
 
-		const int rssi = ((int)rssi_raw / 2) - 160;
+		const float rssi = ((float)rssi_raw / 2) - 160;
 
-		s.printf("RSSI 0x%04X %d, Noise 0x%02X %u, Glitch 0x%02X %u", rssi_raw, rssi, noise_raw, noise_raw, glitch_raw, glitch_raw);
+		s.printf("RSSI %u %0.1fdBm, Noise 0x%02X %u, Glitch 0x%02X %u", rssi_raw, rssi, noise_raw, noise_raw, glitch_raw, glitch_raw);
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add(s);
 
@@ -2902,8 +2910,6 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	Memo1->Lines->Add("write EEPROM complete");
 	Memo1->Update();
 
-	SerialPortComboBoxChange(NULL);
-
 	k5_reboot();
 
 	// give the serial port time to send the packet
@@ -2912,6 +2918,8 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	Memo1->Lines->Add("");
 
 	disconnect();
+
+	SerialPortComboBoxChange(NULL);
 }
 
 void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
@@ -2946,9 +2954,8 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 	Memo1->Lines->Add("Reading ADC ..");
 	Memo1->Update();
 
-	int r = 0;
-
 #if 0
+	int r = 0;
 	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
 		r = k5_hello();
@@ -2973,6 +2980,8 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
+#else
+	int r;
 #endif
 
 	r = k5_readADC();
@@ -3010,9 +3019,8 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 	Memo1->Lines->Add("Reading RSSI ..");
 	Memo1->Update();
 
-	int r = 0;
-
 #if 0
+	int r = 0;
 	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
 	{
 		r = k5_hello();
@@ -3037,6 +3045,8 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
+#else
+	int r;
 #endif
 
 	r = k5_readRSSI();

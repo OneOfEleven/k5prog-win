@@ -93,6 +93,7 @@ struct k5_command
 	int      len;
 	uint8_t *obfuscated_cmd;
 	int      obfuscated_len;
+	uint16_t crc_clear;
 	int      crc_ok;
 };
 
