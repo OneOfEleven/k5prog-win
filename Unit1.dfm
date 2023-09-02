@@ -178,7 +178,7 @@ object Form1: TForm1
       ParentShowHint = False
       PageSize = 1
       Frequency = 1
-      Position = 0
+      Position = 1
       SelEnd = 0
       SelStart = 0
       ShowHint = True

@@ -2357,7 +2357,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	{
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("is the radio turned on ?");
+		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
@@ -2665,7 +2665,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		{
 			disconnect();
 			Memo1->Lines->Add("");
-			Memo1->Lines->Add("is the radio turned on ?");
+			Memo1->Lines->Add("radio not detected");
 			SerialPortComboBoxChange(NULL);
 			return;
 		}
@@ -2860,7 +2860,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	{
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("is the radio turned on ?");
+		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
 		return;
 	}
@@ -2972,7 +2972,7 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 	if (r == 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("is the radio turned on ?");
+		Memo1->Lines->Add("radio not detected");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
@@ -3037,7 +3037,7 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 	if (r == 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("is the radio turned on ?");
+		Memo1->Lines->Add("radio not detected");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
 		return;
@@ -3077,7 +3077,7 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 
 	String s;
 
-	if (m_serial.port.connected)
+	if (SerialPortComboBox->ItemIndex <= 0 || m_serial.port.connected)
 		return;
 
 	Memo1->Clear();
@@ -3113,7 +3113,7 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 		if (r > 0)
 			Memo1->Lines->Add("radio is in firmware update mode");
 		else
-			Memo1->Lines->Add("is the radio turned on ?");
+			Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
 		m_verbose = verbose;
 		return;
@@ -3123,7 +3123,7 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 		Memo1->Lines->Add("");
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("is the radio turned on ?");
+		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
 		m_verbose = verbose;
 		return;
