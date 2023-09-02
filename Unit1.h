@@ -213,6 +213,8 @@ __published:
 	void __fastcall SerialPortComboBoxChange(TObject *Sender);
 	void __fastcall ReadADCButtonClick(TObject *Sender);
 	void __fastcall ReadRSSIButtonClick(TObject *Sender);
+	void __fastcall SerialPortComboBoxSelect(TObject *Sender);
+	void __fastcall SerialSpeedComboBoxSelect(TObject *Sender);
 
 private:
 

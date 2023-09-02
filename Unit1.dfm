@@ -111,6 +111,7 @@ object Form1: TForm1
       TabOrder = 0
       OnChange = SerialPortComboBoxChange
       OnDropDown = SerialPortComboBoxDropDown
+      OnSelect = SerialPortComboBoxSelect
     end
     object SerialSpeedComboBox: TComboBox
       Left = 288
@@ -124,6 +125,7 @@ object Form1: TForm1
       DropDownCount = 20
       ItemHeight = 13
       TabOrder = 1
+      OnSelect = SerialSpeedComboBoxSelect
     end
     object ClearButton: TButton
       Left = 504
