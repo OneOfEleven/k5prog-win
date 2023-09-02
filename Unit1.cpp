@@ -645,6 +645,9 @@ void __fastcall TForm1::disconnect()
 
 	if (m_serial.port.connected)
 	{
+		m_serial.port.rts = true;
+		m_serial.port.dtr = true;
+
 		m_serial.port.Disconnect();
 
 		String s;
@@ -3093,42 +3096,47 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 	const int verbose = m_verbose;
 	m_verbose = 0;
 
-	int r = k5_wait_flash_message();
-	if (r <= 0)
-	{	// radio is either turned off or is not in firmware update mode
-
-		for (int i = 0; i < UVK5_HELLO_TRIES; i++)
-		{
-			r = k5_hello();
-			if (r != 0)
-				break;
-			Application->ProcessMessages();
-		}
-		Memo1->Lines->Add("");
-		if (r == 0)
-		{
-			disconnect();
-			Memo1->Lines->Add("");
-			Memo1->Lines->Add("is the radio turned on ?");
-			SerialPortComboBoxChange(NULL);
-			m_verbose = verbose;
-			return;
-		}
-		if (r > 0)
-		{
-			disconnect();
-			Memo1->Lines->Add("");
-			Memo1->Lines->Add("radio is in normal run mode");
-			SerialPortComboBoxChange(NULL);
-			m_verbose = verbose;
-			return;
-		}
+	int r;
+	for (int i = 0; i < 2; i++)
+	{
+		r = k5_hello();
+		if (r != 0)
+			break;
+		Application->ProcessMessages();
 	}
-	else
+	if (r < 0)
+	{
+		r = k5_wait_flash_message();
+		Memo1->Lines->Add("");
+		disconnect();
+		Memo1->Lines->Add("");
+		if (r > 0)
+			Memo1->Lines->Add("radio is in firmware update mode");
+		else
+			Memo1->Lines->Add("is the radio turned on ?");
+		SerialPortComboBoxChange(NULL);
+		m_verbose = verbose;
+		return;
+	}
+	if (r == 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("radio is in firmware update mode");
+		disconnect();
 		Memo1->Lines->Add("");
+		Memo1->Lines->Add("is the radio turned on ?");
+		SerialPortComboBoxChange(NULL);
+		m_verbose = verbose;
+		return;
+	}
+	if (r > 0)
+	{
+		Memo1->Lines->Add("");
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("radio is in normal run mode");
+		SerialPortComboBoxChange(NULL);
+		m_verbose = verbose;
+		return;
 	}
 
 	disconnect();

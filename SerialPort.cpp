@@ -534,7 +534,7 @@ void __fastcall CSerialPort::Disconnect()
 	{
 		::PurgeComm(handle, PURGE_RXABORT | PURGE_RXCLEAR);
 		::ClearCommError(handle, NULL, NULL);
-		::SetCommState(handle, &m_original_dcb);
+//		::SetCommState(handle, &m_original_dcb);
 		::SetCommTimeouts(handle, &m_original_timeouts);
 		::ClearCommError(handle, NULL, NULL);
 		::CloseHandle(handle);
