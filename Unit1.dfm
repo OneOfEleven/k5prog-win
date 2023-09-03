@@ -31,7 +31,8 @@ object Form1: TForm1
         Width = 200
       end
       item
-        Width = 50
+        Alignment = taCenter
+        Width = 100
       end
       item
         Width = 50
@@ -140,18 +141,18 @@ object Form1: TForm1
       TabOrder = 6
       OnClick = ClearButtonClick
     end
-    object ReadEEPROMButton: TButton
+    object ReadConfigButton: TButton
       Left = 12
       Top = 50
       Width = 109
       Height = 25
       Cursor = crHandPoint
-      Hint = 'Read and save the EEPROM'
-      Caption = 'Read EEPROM'
+      Hint = 'Download configuration file from radio'
+      Caption = 'Read Config'
       ParentShowHint = False
       ShowHint = True
       TabOrder = 3
-      OnClick = ReadEEPROMButtonClick
+      OnClick = ReadConfigButtonClick
     end
     object WriteFirmwareButton: TButton
       Left = 244
@@ -159,7 +160,7 @@ object Form1: TForm1
       Width = 109
       Height = 25
       Cursor = crHandPoint
-      Hint = 'Write firmware file'
+      Hint = 'Upload firmware file to radio'
       Caption = 'Write Firmware'
       ParentShowHint = False
       ShowHint = True
@@ -187,18 +188,18 @@ object Form1: TForm1
       TickStyle = tsAuto
       OnChange = VerboseTrackBarChange
     end
-    object WriteEEPROMButton: TButton
+    object WriteConfigButton: TButton
       Left = 128
       Top = 50
       Width = 109
       Height = 25
       Cursor = crHandPoint
-      Hint = 'Load and write the EEPROM'
-      Caption = 'Write EEPROM'
+      Hint = 'Upload configuration file to radio'
+      Caption = 'Write Config'
       ParentShowHint = False
       ShowHint = True
       TabOrder = 4
-      OnClick = WriteEEPROMButtonClick
+      OnClick = WriteConfigButtonClick
     end
     object ReadADCButton: TButton
       Left = 576
@@ -206,7 +207,10 @@ object Form1: TForm1
       Width = 75
       Height = 25
       Cursor = crHandPoint
+      Hint = 'Test only'
       Caption = 'Read ADC'
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 7
       OnClick = ReadADCButtonClick
     end
@@ -216,7 +220,10 @@ object Form1: TForm1
       Width = 75
       Height = 25
       Cursor = crHandPoint
+      Hint = 'Test only'
       Caption = 'Read RSSI'
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 8
       OnClick = ReadRSSIButtonClick
     end

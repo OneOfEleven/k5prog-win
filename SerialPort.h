@@ -118,6 +118,8 @@ private:
 	COMSTAT			m_stat_read;
 	DWORD				m_errors_read;
 
+	bool           m_rx_break;
+
 	std::vector <T_SerialPortInfo> m_serialPortList;
 
 	std::vector <uint8_t> m_buffer;
@@ -227,18 +229,20 @@ public:
 	__property int txBytesWaiting   = {read = TxBytesWaiting};
 	__property int txByte           = {write = TxByte};
 
-	__property int baudRate = {read = GetBaudRate, write = SetBaudRate};
-	__property int byteSize = {read = GetByteSize, write = SetByteSize};
-	__property int parity   = {read = GetParity,   write = SetParity};
-	__property int stopBits = {read = GetStopBits, write = SetStopBits};
+	__property int baudRate         = {read = GetBaudRate, write = SetBaudRate};
+	__property int byteSize         = {read = GetByteSize, write = SetByteSize};
+	__property int parity           = {read = GetParity,   write = SetParity};
+	__property int stopBits         = {read = GetStopBits, write = SetStopBits};
 
-	__property bool rts  = {write = SetRTS};
-	__property bool dtr  = {write = SetDTR};
+	__property bool rts             = {write = SetRTS};
+	__property bool dtr             = {write = SetDTR};
 
-	__property bool cts  = {read = GetCTS};
-	__property bool dsr  = {read = GetDSR};
-	__property bool ring = {read = GetRING};
-	__property bool rlsd = {read = GetRLSD};
+	__property bool cts             = {read = GetCTS};
+	__property bool dsr             = {read = GetDSR};
+	__property bool ring            = {read = GetRING};
+	__property bool rlsd            = {read = GetRLSD};
+
+	__property bool rx_break        = {read = m_rx_break};
 };
 
 #pragma option pop

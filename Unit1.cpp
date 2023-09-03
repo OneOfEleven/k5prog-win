@@ -191,7 +191,7 @@ void __fastcall TForm1::FormCreate(TObject *Sender)
 
 	m_verbose = VerboseTrackBar->Position;
 
-	memset(m_eeprom, 0, sizeof(m_eeprom));
+	memset(m_config, 0, sizeof(m_config));
 
 	m_serial.port_name = "";
 	//m_serial.port;
@@ -512,6 +512,7 @@ void __fastcall TForm1::loadSettings()
 	}
 	SerialPortComboBoxChange(SerialPortComboBox);
 
+#if 0
 	ne = SerialSpeedComboBox->OnChange;
 	SerialSpeedComboBox->OnChange = NULL;
 	i = ini->ReadInteger("SerialPort", "Speed", DEFAULT_SERIAL_SPEED);
@@ -520,6 +521,7 @@ void __fastcall TForm1::loadSettings()
 		i = SerialSpeedComboBox->Items->IndexOfObject((TObject *)DEFAULT_SERIAL_SPEED);
 	SerialSpeedComboBox->ItemIndex = i;
 	SerialSpeedComboBox->OnChange = ne;
+#endif
 
 	delete ini;
 }
@@ -971,12 +973,28 @@ void __fastcall TForm1::FormKeyDown(TObject *Sender, WORD &Key,
 
 void __fastcall TForm1::Timer1Timer(TObject *Sender)
 {
-	String s = FormatDateTime(" dddd dd mmm yyyy  hh:nn:ss", Now());
+	String s;
+	bool updated = false;
+
+	s = FormatDateTime(" dddd dd mmm yyyy  hh:nn:ss", Now());
 	if (StatusBar1->Panels->Items[0]->Text != s)
 	{
 		StatusBar1->Panels->Items[0]->Text = s;
-		StatusBar1->Update();
+		updated = true;
 	}
+
+	if (m_serial.port.connected)
+		s = m_serial.port.rx_break ? "RX BREAK" : "";
+	else
+		s = "";
+	if (StatusBar1->Panels->Items[1]->Text != s)
+	{
+		StatusBar1->Panels->Items[1]->Text = s;
+		updated = true;
+	}
+
+	if (updated)
+		StatusBar1->Update();
 }
 
 int __fastcall TForm1::saveFile(String filename, const uint8_t *data, const size_t size)
@@ -1552,7 +1570,7 @@ int __fastcall TForm1::k5_send_buf(const uint8_t *buf, const int len)
 	return s_len;
 }
 
-int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int offset)
+int __fastcall TForm1::k5_read_config(uint8_t *buf, const int len, const int offset)
 {
 	String             s;
 	int                l;
@@ -1564,7 +1582,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 
 	if (m_verbose > 0)
 	{
-		s.printf("read_eeprom  offset %04X  len %d", offset, len);
+		s.printf("read_config  offset %04X  len %d", offset, len);
 		Memo1->Lines->Add(s);
 		Memo1->Update();
 	}
@@ -1636,7 +1654,7 @@ int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int off
 	return 0;
 }
 
-int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int offset)
+int __fastcall TForm1::k5_write_config(uint8_t *buf, const int len, const int offset)
 {
 	String  s;
 	uint8_t buffer[4 + 8 + 128];
@@ -1646,7 +1664,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 
 	if (m_verbose > 0)
 	{
-		s.printf("write_eeprom  offset %04X  len %d", offset, len);
+		s.printf("write_config  offset %04X  len %d", offset, len);
 		Memo1->Lines->Add(s);
 		Memo1->Update();
 	}
@@ -1793,8 +1811,8 @@ int __fastcall TForm1::k5_wait_flash_message()
 		return 1;
 	}
 
-	if (m_verbose > 1)
-		Memo1->Lines->Add("error: no valid packet received");
+//	if (m_verbose > 1)
+//		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
 }
@@ -1816,7 +1834,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 	strcpy(buffer + 4, ver);
 
-	if (m_verbose > 0)
+//	if (m_verbose > 0)
 	{
 		s.printf("sending firmware version '%s' ..", ver);
 //		Memo1->Lines->Add("");
@@ -1865,7 +1883,7 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 		return 1;
 	}
 
-	if (m_verbose > 1)
+//	if (m_verbose > 1)
 		Memo1->Lines->Add("error: no valid packet received");
 
 	return 0;
@@ -2174,9 +2192,9 @@ int __fastcall TForm1::k5_readADC()
 //		const uint16_t adc_cur = ((uint16_t)rx_data[7] << 8) | ((uint16_t)rx_data[6] << 0);
 
 		const unsigned int adc_ref_addr = 0x1F40 + (sizeof(uint16_t) * 3);
-		const uint16_t adc_ref = ((uint16_t)m_eeprom[adc_ref_addr + 1] << 8) | ((uint16_t)m_eeprom[adc_ref_addr + 0] << 0);
+		const uint16_t adc_ref = ((uint16_t)m_config[adc_ref_addr + 1] << 8) | ((uint16_t)m_config[adc_ref_addr + 0] << 0);
 
-		// battery calibration data in the config/eeprom area
+		// battery calibration data in the config area
 		// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
 		//
 		//             ADC     V = (7.6 * ADC) / [3]
@@ -2321,7 +2339,7 @@ void __fastcall TForm1::VerboseTrackBarChange(TObject *Sender)
 	m_verbose = VerboseTrackBar->Position;
 }
 
-void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
+void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 {
 	String  s;
 
@@ -2370,10 +2388,10 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		return;
 	}
 
-	const int size      = sizeof(m_eeprom);
-	const int block_len = UVK5_EEPROM_BLOCKSIZE;
+	const int size      = sizeof(m_config);
+	const int block_len = UVK5_CONFIG_BLOCKSIZE;
 
-	memset(m_eeprom, 0, sizeof(m_eeprom));
+	memset(m_config, 0, sizeof(m_config));
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
@@ -2381,10 +2399,10 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	for (unsigned int i = 0; i < size; i += block_len)
 	{
-		r = k5_read_eeprom(&m_eeprom[i], block_len, i);
+		r = k5_read_config(&m_config[i], block_len, i);
 		if (r <= 0)
 		{
-			s.printf("error: k5_read_eeprom() [%d]", r);
+			s.printf("error: k5_read_config() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
 			disconnect();
@@ -2398,7 +2416,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		Application->ProcessMessages();
 	}
 
-	Memo1->Lines->Add("read EEPROM complete");
+	Memo1->Lines->Add("read CONFIG complete");
 	Memo1->Lines->Add("");
 
 	disconnect();
@@ -2412,10 +2430,10 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 	// save the radios configuration data
 
 	if (m_verbose > 2)
-	{	// show the eeprom contents
+	{	// show the config contents
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
-		k5_hdump(&m_eeprom[0], size);
+		k5_hdump(&m_config[0], size);
 		Memo1->Lines->EndUpdate();
 		Memo1->Lines->Add("");
 		Memo1->Update();
@@ -2423,7 +2441,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	SaveDialog1->Title = "Select a filename to save EEPROM too";
+	SaveDialog1->Title = "Save config file ..";
 	const bool ok = SaveDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2437,7 +2455,7 @@ void __fastcall TForm1::ReadEEPROMButtonClick(TObject *Sender)
 		name += ext;
 	}
 
-	saveFile(name, &m_eeprom[0], size);
+	saveFile(name, &m_config[0], size);
 
 	// *******************************************
 
@@ -2683,7 +2701,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	// overcome version problems
 	// the radios bootloader can refuse the chosen firmware version, so fool the booloader
-	if (m_firmware_ver.Length() >= 3 && m_bootloader_ver.Length() >= 3)
+	if (m_firmware_ver.Length() >= 2 && m_bootloader_ver.Length() >= 2)
 	{
 		if (m_firmware_ver[1] >= '0' && m_firmware_ver[1] <= '9')
 			if (m_firmware_ver[2] == '.' && m_bootloader_ver[2] == '.')
@@ -2749,7 +2767,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	// *******************************************
 }
 
-void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
+void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 {
 	String s;
 
@@ -2763,7 +2781,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	OpenDialog1->Title = "Select an EEPROM file to upload";
+	OpenDialog1->Title = "Load config file ..";
 	const bool ok = OpenDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2797,27 +2815,27 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	{
 		Application->BringToFront();
 		Application->NormalizeTopMosts();
-		Application->MessageBox("File appears to be to small to be an eeprom file", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+		Application->MessageBox("File appears to be to small to be an config file", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
 		return;
 	}
 
-	if (m_loadfile_data.size() > UVK5_MAX_EEPROM_SIZE)
+	if (m_loadfile_data.size() > UVK5_MAX_CONFIG_SIZE)
 	{
 		Application->BringToFront();
 		Application->NormalizeTopMosts();
-		s.printf("File is to large to be an eeprom file (max 0x%04X)", UVK5_MAX_EEPROM_SIZE);
+		s.printf("File is to large to be an config file (max 0x%04X)", UVK5_MAX_CONFIG_SIZE);
 		Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
 		return;
 	}
 
-	if (m_loadfile_data.size() > UVK5_EEPROM_SIZE)
+	if (m_loadfile_data.size() > UVK5_CONFIG_SIZE)
 	{
 		#if 1
 			Application->BringToFront();
 			Application->NormalizeTopMosts();
-			s.printf("File is larger than normal (0x%04X)\n\nStill upload ?", UVK5_EEPROM_SIZE);
+			s.printf("File is larger than normal (0x%04X)\n\nStill upload ?", UVK5_CONFIG_SIZE);
 			const int res = Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2);
 			Application->RestoreTopMosts();
 			switch (res)
@@ -2831,7 +2849,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		#else
 			Application->BringToFront();
 			Application->NormalizeTopMosts();
-			s.printf("File is to large to be an eeprom file (max 0x%04X)\n\nUpload cancelled", UVK5_EEPROM_SIZE);
+			s.printf("File is to large to be an config file (max 0x%04X)\n\nUpload cancelled", UVK5_CONFIG_SIZE);
 			Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 			Application->RestoreTopMosts();
 			return;
@@ -2887,7 +2905,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 	}
 
-	Memo1->Lines->Add("writing eeprom area ..");
+	Memo1->Lines->Add("writing config area ..");
 
 	int size = m_loadfile_data.size();
 
@@ -2895,15 +2913,15 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 	CGauge1->Progress = 0;
 	CGauge1->Update();
 
-	for (int i = 0; i < size; i += UVK5_EEPROM_BLOCKSIZE)
+	for (int i = 0; i < size; i += UVK5_CONFIG_BLOCKSIZE)
 	{
 		const int addr = i;
-		const int len  = UVK5_EEPROM_BLOCKSIZE;
+		const int len  = UVK5_CONFIG_BLOCKSIZE;
 
-		const int r = k5_write_eeprom(&m_loadfile_data[addr], len, addr);
+		const int r = k5_write_config(&m_loadfile_data[addr], len, addr);
 		if (r <= 0)
 		{
-			s.printf("error: k5_write_eeprom() [%d]", r);
+			s.printf("error: k5_write_config() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
 			disconnect();
@@ -2917,7 +2935,7 @@ void __fastcall TForm1::WriteEEPROMButtonClick(TObject *Sender)
 		Application->ProcessMessages();
 	}
 
-	Memo1->Lines->Add("write EEPROM complete");
+	Memo1->Lines->Add("write CONFIG complete");
 	Memo1->Update();
 
 	k5_reboot();
@@ -2936,8 +2954,8 @@ void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
 {
 	const bool enabled = !m_serial.port.connected && (SerialPortComboBox->ItemIndex > 0);
 
-	ReadEEPROMButton->Enabled    = enabled;
-	WriteEEPROMButton->Enabled   = enabled;
+	ReadConfigButton->Enabled    = enabled;
+	WriteConfigButton->Enabled   = enabled;
 	WriteFirmwareButton->Enabled = enabled;
 	ReadADCButton->Enabled       = enabled;
 	ReadRSSIButton->Enabled      = enabled;
@@ -3138,7 +3156,7 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 		Memo1->Lines->Add("");
 		disconnect();
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("radio is in normal run mode");
+		Memo1->Lines->Add("radio is in user mode");
 		SerialPortComboBoxChange(NULL);
 		m_verbose = verbose;
 		return;

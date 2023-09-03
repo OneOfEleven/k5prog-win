@@ -245,6 +245,10 @@ void __fastcall CSerialPort::getState()
 
 	if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
 		pushError(::GetLastError(), "ClearCommError ");
+	else
+	{
+		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+	}
 }
 
 void __fastcall CSerialPort::GetSerialPortList()
@@ -395,6 +399,10 @@ bool __fastcall CSerialPort::Connected()
 			Disconnect();
 		}
 	}
+	else
+	{
+		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+	}
 
 	return (m_device_handle != INVALID_HANDLE_VALUE) ? true : false;
 }
@@ -418,6 +426,8 @@ int __fastcall CSerialPort::Connect(STRING device_name, const bool use_overlappe
 
 	m_tx.buffer_rd = 0;
 	m_tx.buffer_wr = 0;
+
+	m_rx_break = false;
 
 	if (device_name.IsEmpty())
 		return -1;
@@ -501,6 +511,10 @@ int __fastcall CSerialPort::Connect(STRING device_name, const bool use_overlappe
 
 	if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
 		pushError(::GetLastError(), "connect ClearCommError ");
+	else
+	{
+		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+	}
 
 	return ERROR_SUCCESS;	// OK
 }
@@ -561,6 +575,10 @@ void __fastcall CSerialPort::processTx()
 			if (err != ERROR_INVALID_FUNCTION)
 				pushError(err, "tx ClearCommError ");
 		}
+		else
+		{
+			m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+		}
 
 		if (len > 0)
 		{
@@ -587,6 +605,10 @@ void __fastcall CSerialPort::processTx()
 				const DWORD err = ::GetLastError();
 				if (err != ERROR_INVALID_FUNCTION)
 					pushError(err, "tx ClearCommError ");
+			}
+			else
+			{
+				m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
 			}
 
 			if (len > 0)
@@ -653,6 +675,11 @@ void __fastcall CSerialPort::processRx()
 			if (error != ERROR_INVALID_FUNCTION)
 				pushError(error, "rx ClearCommError ");
 		}
+		else
+		{
+			m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+		}
+		
 		const DWORD bytes_available = m_stat_read.cbInQue;
 
 //		if (bytes_available > 0)
@@ -680,6 +707,11 @@ void __fastcall CSerialPort::processRx()
 				if (error != ERROR_INVALID_FUNCTION)
 					pushError(error, "rx ClearCommError ");
 			}
+			else
+			{
+				m_rx_break  = (m_errors_read & CE_BREAK) ? true : false;
+			}
+
 			const DWORD bytes_available = m_stat_read.cbInQue;
 
 //			if (bytes_available > 0)
