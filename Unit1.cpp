@@ -2684,12 +2684,17 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	// overcome version problems
 	// the radios bootloader can refuse the chosen firmware version, so fool the booloader
 	if (m_firmware_ver.Length() >= 3 && m_bootloader_ver.Length() >= 3)
-		if (m_firmware_ver[1] != '*' && m_firmware_ver[2] == '.' && m_bootloader_ver[2] == '.')
-			if (m_firmware_ver[1] > m_bootloader_ver[1])
-				m_firmware_ver[1] = '*';
+	{
+		if (m_firmware_ver[1] >= '0' && m_firmware_ver[1] <= '9')
+			if (m_firmware_ver[2] == '.' && m_bootloader_ver[2] == '.')
+				if (m_firmware_ver[1] > m_bootloader_ver[1])
+					m_firmware_ver[1] = '*';
+	}
+	else
+		m_firmware_ver = '*';
 
 	// tell the bootloader what the new firmwares version is
-	r = k5_send_flash_version_message(!m_firmware_ver.IsEmpty() ? m_firmware_ver.c_str() : "2.01.26");
+	r = k5_send_flash_version_message(m_firmware_ver.c_str());
 	if (r <= 0)
 	{
 		Memo1->Lines->Add("error: send firmware version");
