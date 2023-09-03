@@ -147,7 +147,7 @@ object Form1: TForm1
       Width = 109
       Height = 25
       Cursor = crHandPoint
-      Hint = 'Download configuration file from radio'
+      Hint = 'Download configuration data from radio'
       Caption = 'Read Config'
       ParentShowHint = False
       ShowHint = True
@@ -173,7 +173,7 @@ object Form1: TForm1
       Width = 137
       Height = 41
       Cursor = crHandPoint
-      Hint = 'Verbose level'
+      Hint = 'Verbose level (0..3)'
       Max = 3
       Orientation = trHorizontal
       ParentShowHint = False
@@ -194,7 +194,7 @@ object Form1: TForm1
       Width = 109
       Height = 25
       Cursor = crHandPoint
-      Hint = 'Upload configuration file to radio'
+      Hint = 'Upload configuration data to radio'
       Caption = 'Write Config'
       ParentShowHint = False
       ShowHint = True

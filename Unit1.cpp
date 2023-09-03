@@ -498,7 +498,8 @@ void __fastcall TForm1::loadSettings()
 	Width  = ini->ReadInteger("MainForm", "Width",  Width);
 	Height = ini->ReadInteger("MainForm", "Height", Height);
 
-	m_verbose = ini->ReadInteger("GUI", "Verbose", VerboseTrackBar->Position);
+	i = ini->ReadInteger("GUI", "Verbose", VerboseTrackBar->Position);
+	m_verbose = (i < VerboseTrackBar->Min) ? VerboseTrackBar->Min : (i > VerboseTrackBar->Max) ? VerboseTrackBar->Max : i;
 	VerboseTrackBar->Position = m_verbose;
 
 	m_serial.port_name = ini->ReadString("SerialPort", "Name", SerialPortComboBox->Text);
@@ -1751,7 +1752,7 @@ int __fastcall TForm1::k5_wait_flash_message()
 	if (m_verbose > 0)
 	{
 		Memo1->Lines->Add("");
-		Memo1->Lines->Add("waiting for firmware update mode packet ..");
+		Memo1->Lines->Add("listening for firmware update mode packet ..");
 		Memo1->Update();
 	}
 
@@ -2582,6 +2583,12 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 				encrypted = false;
 		#endif
 
+		if (!encrypted)
+		{
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("firmware file de-obfuscated");
+		}
+		
 		if (!encrypted && m_loadfile_data.size() >= (0x2000 + 16))
 		{	// extract and remove the 16-byte version string
 
@@ -2646,11 +2653,15 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	if (m_verbose > 2)
 	{	// show the files contents - takes a short while to display
+
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("creating firmware hex dump ..");
+		Memo1->Update();
+
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
 		k5_hdump(&m_loadfile_data[0], m_loadfile_data.size());
 		Memo1->Lines->EndUpdate();
-		Memo1->Lines->Add("");
 	}
 
 	// *******************************************
