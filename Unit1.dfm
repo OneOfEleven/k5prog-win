@@ -92,9 +92,9 @@ object Form1: TForm1
     end
     object CGauge1: TCGauge
       Left = 362
-      Top = 52
+      Top = 50
       Width = 133
-      Height = 21
+      Height = 25
       ForeColor = clGreen
       Progress = 50
     end

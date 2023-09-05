@@ -202,6 +202,7 @@ void __fastcall TForm1::FormCreate(TObject *Sender)
 	OpenDialog1->InitialDir = ExtractFilePath(Application->ExeName);
 	SaveDialog1->InitialDir = ExtractFilePath(Application->ExeName);
 
+	CGauge1->Visible = false;
 	CGauge1->Progress = 0;
 
 //	make_CRC16_table();
@@ -499,7 +500,7 @@ void __fastcall TForm1::loadSettings()
 	Height = ini->ReadInteger("MainForm", "Height", Height);
 
 	i = ini->ReadInteger("GUI", "Verbose", VerboseTrackBar->Position);
-	m_verbose = (i < VerboseTrackBar->Min) ? VerboseTrackBar->Min : (i > VerboseTrackBar->Max) ? VerboseTrackBar->Max : i;
+	m_verbose = (i < VerboseTrackBar->Min) ? 1 : (i > VerboseTrackBar->Max) ? 1 : i;
 	VerboseTrackBar->Position = m_verbose;
 
 	m_serial.port_name = ini->ReadString("SerialPort", "Name", SerialPortComboBox->Text);
@@ -2397,6 +2398,7 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
 	CGauge1->Update();
+	CGauge1->Visible = true;
 
 	for (unsigned int i = 0; i < size; i += block_len)
 	{
@@ -2406,6 +2408,7 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 			s.printf("error: k5_read_config() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
+			CGauge1->Visible = false;
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2419,6 +2422,8 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("read CONFIG complete");
 	Memo1->Lines->Add("");
+
+	CGauge1->Visible = false;
 
 	disconnect();
 
@@ -2588,7 +2593,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			Memo1->Lines->Add("");
 			Memo1->Lines->Add("firmware file de-obfuscated");
 		}
-		
+
 		if (!encrypted && m_loadfile_data.size() >= (0x2000 + 16))
 		{	// extract and remove the 16-byte version string
 
@@ -2710,23 +2715,24 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	else
 		Memo1->Lines->Add("");
 
-	// overcome version problems
-	// the radios bootloader can refuse the chosen firmware version, so fool the booloader
+	// the bootloader will at times refuse the firmware version
 	if (m_firmware_ver.Length() >= 2 && m_bootloader_ver.Length() >= 2)
 	{
 		if (m_firmware_ver[1] >= '0' && m_firmware_ver[1] <= '9')
 			if (m_firmware_ver[2] == '.' && m_bootloader_ver[2] == '.')
 				if (m_firmware_ver[1] > m_bootloader_ver[1])
+//				if (m_firmware_ver[1] != m_bootloader_ver[1])
 					m_firmware_ver[1] = '*';
 	}
 	else
 		m_firmware_ver = '*';
 
-	// tell the bootloader what the new firmwares version is
+	// pass the firmware version to the bootloader
+	// it will either allow the upload, or not
 	r = k5_send_flash_version_message(m_firmware_ver.c_str());
 	if (r <= 0)
 	{
-		Memo1->Lines->Add("error: send firmware version");
+		Memo1->Lines->Add("error: firmware upload refused");
 		Memo1->Lines->Add("");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
@@ -2737,6 +2743,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	CGauge1->MaxValue = m_loadfile_data.size();
 	CGauge1->Progress = 0;
+	CGauge1->Visible = true;
 	CGauge1->Update();
 
 	for (int i = 0; i < (int)m_loadfile_data.size(); i += UVK5_FLASH_BLOCKSIZE)
@@ -2751,6 +2758,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			s.printf("error: k5_write_flash() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
+			CGauge1->Visible = false;
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2764,6 +2772,8 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("write FLASH complete");
 	Memo1->Update();
+
+	CGauge1->Visible = false;
 
 	k5_reboot();
 
@@ -2922,6 +2932,7 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
+	CGauge1->Visible = true;
 	CGauge1->Update();
 
 	for (int i = 0; i < size; i += UVK5_CONFIG_BLOCKSIZE)
@@ -2935,6 +2946,7 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 			s.printf("error: k5_write_config() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
+			CGauge1->Visible = false;
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2948,6 +2960,8 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("write CONFIG complete");
 	Memo1->Update();
+
+	CGauge1->Visible = false;
 
 	k5_reboot();
 
