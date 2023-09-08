@@ -71,7 +71,8 @@
 #define UVK5_HELLO_TRIES                     2            //
 
 #define UVK5_CONFIG_SIZE                     0x00001d00   // 7424
-#define UVK5_MAX_CONFIG_SIZE                 0x00002000   // 8192    the radios calibration data is in 1D00 to 2000
+#define UVK5_CALIB_SIZE                      0x00000200   // 512
+#define UVK5_MAX_CONFIG_SIZE                 0x00002000   // 8192
 #define UVK5_CONFIG_BLOCKSIZE                128          //
 
 #define UVK5_FLASH_SIZE                      0x0000f000   // 61440
@@ -194,10 +195,15 @@ __published:
 	TButton *ReadConfigButton;
 	TButton *WriteFirmwareButton;
 	TTrackBar *VerboseTrackBar;
-	TCGauge *CGauge1;
 	TButton *WriteConfigButton;
 	TButton *ReadADCButton;
 	TButton *ReadRSSIButton;
+	TButton *ReadCalibrationButton;
+	TSaveDialog *SaveDialog2;
+	TCGauge *CGauge1;
+	TButton *WriteCalibrationButton;
+	TOpenDialog *OpenDialog2;
+	TOpenDialog *OpenDialog3;
 	void __fastcall FormCreate(TObject *Sender);
 	void __fastcall FormDestroy(TObject *Sender);
 	void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
@@ -215,6 +221,9 @@ __published:
 	void __fastcall ReadRSSIButtonClick(TObject *Sender);
 	void __fastcall SerialPortComboBoxSelect(TObject *Sender);
 	void __fastcall SerialSpeedComboBoxSelect(TObject *Sender);
+	void __fastcall ReadCalibrationButtonClick(TObject *Sender);
+	void __fastcall StatusBar1Resize(TObject *Sender);
+	void __fastcall WriteCalibrationButtonClick(TObject *Sender);
 
 private:
 
@@ -238,7 +247,9 @@ private:
 
 	int                   m_verbose;
 
-	uint8_t               m_config[UVK5_MAX_CONFIG_SIZE];
+//	uint8_t               m_config[UVK5_MAX_CONFIG_SIZE];
+	uint8_t               m_config[UVK5_CONFIG_SIZE];
+	uint8_t               m_calib[UVK5_CALIB_SIZE];
 
 	std::vector < std::vector <uint8_t> > m_rx_packet_queue;
 
@@ -285,8 +296,8 @@ private:
 	int  __fastcall k5_deobfuscate(struct k5_command *cmd);
 	int  __fastcall k5_send_cmd(struct k5_command *cmd);
 	int  __fastcall k5_send_buf(const uint8_t *buf, const int len);
-	int  __fastcall k5_read_config(uint8_t *buf, const int len, const int offset);
-	int  __fastcall k5_write_config(uint8_t *buf, const int len, const int offset);
+	int  __fastcall k5_read_eeprom(uint8_t *buf, const int len, const int offset);
+	int  __fastcall k5_write_eeprom(uint8_t *buf, const int len, const int offset);
 	int  __fastcall k5_wait_flash_message();
 	int  __fastcall k5_send_flash_version_message(const char *ver);
 //	int  __fastcall k5_read_flash(uint8_t *buf, const int len, const int offset);

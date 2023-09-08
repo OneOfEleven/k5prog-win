@@ -202,8 +202,16 @@ void __fastcall TForm1::FormCreate(TObject *Sender)
 	OpenDialog1->InitialDir = ExtractFilePath(Application->ExeName);
 	SaveDialog1->InitialDir = ExtractFilePath(Application->ExeName);
 
-	CGauge1->Visible = false;
+	OpenDialog2->InitialDir = ExtractFilePath(Application->ExeName);
+	SaveDialog2->InitialDir = ExtractFilePath(Application->ExeName);
+
+	OpenDialog3->InitialDir = ExtractFilePath(Application->ExeName);
+
+	CGauge1->Visible  = false;
 	CGauge1->Progress = 0;
+	CGauge1->Parent   = StatusBar1;
+//	CGauge1->Parent   = StatusBar1->Panels->Items[2];
+//	CGauge1->Align    = alClient;
 
 //	make_CRC16_table();
 
@@ -1572,7 +1580,7 @@ int __fastcall TForm1::k5_send_buf(const uint8_t *buf, const int len)
 	return s_len;
 }
 
-int __fastcall TForm1::k5_read_config(uint8_t *buf, const int len, const int offset)
+int __fastcall TForm1::k5_read_eeprom(uint8_t *buf, const int len, const int offset)
 {
 	String             s;
 	int                l;
@@ -1656,7 +1664,7 @@ int __fastcall TForm1::k5_read_config(uint8_t *buf, const int len, const int off
 	return 0;
 }
 
-int __fastcall TForm1::k5_write_config(uint8_t *buf, const int len, const int offset)
+int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int offset)
 {
 	String  s;
 	uint8_t buffer[4 + 8 + 128];
@@ -2402,13 +2410,14 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 
 	for (unsigned int i = 0; i < size; i += block_len)
 	{
-		r = k5_read_config(&m_config[i], block_len, i);
+		r = k5_read_eeprom(&m_config[i], block_len, i);
 		if (r <= 0)
 		{
-			s.printf("error: k5_read_config() [%d]", r);
+			s.printf("error: k5_read_eeprom() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
 			CGauge1->Visible = false;
+			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2424,6 +2433,7 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	Memo1->Lines->Add("");
 
 	CGauge1->Visible = false;
+	StatusBar1->Update();
 
 	disconnect();
 
@@ -2447,7 +2457,7 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	SaveDialog1->Title = "Save config file ..";
+	SaveDialog1->Title = "Save configuration file ..";
 	const bool ok = SaveDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2462,23 +2472,6 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	}
 
 	saveFile(name, &m_config[0], size);
-
-	// *******************************************
-
-	// battery calibration
-	// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
-	//
-	//             ADC     V = (760 * ADC) / [3] / 100
-	// [0] 04DE .. 1246 .. 5.021V .. empty battery
-	// [1] 06FA .. 1786 .. 7.197V .. 1 bar
-	// [2] 0745 .. 1861 .. 7.499V .. 2 bar
-	// [3] 075E .. 1886 .. 7.600V .. 3 bar
-	// [4] 07C5 .. 1989 .. 8.015V .. 4 bar
-	// [5] 08FC .. 2300 .. 9.268V .. overwritten by radio to 2300
-	// [6] FFFF
-	// [7] FFFF
-	//
-	// actual bat volt = (760 * ADC) / [3] / 100
 
 	// *******************************************
 }
@@ -2496,13 +2489,13 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	OpenDialog1->Title = "Select a FIRMWARE file to upload";
-	const bool ok = OpenDialog1->Execute();
+	OpenDialog3->Title = "Select a FIRMWARE file to upload";
+	const bool ok = OpenDialog3->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
 		return;
 
-	String name = OpenDialog1->FileName;
+	String name = OpenDialog3->FileName;
 	String ext  = ExtractFileExt(name).LowerCase();
 	if (ext.IsEmpty())
 	{
@@ -2741,6 +2734,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("");
 
+	if (m_verbose <= 0)
+		Memo1->Lines->Add("writing firmware ..");
+
 	CGauge1->MaxValue = m_loadfile_data.size();
 	CGauge1->Progress = 0;
 	CGauge1->Visible = true;
@@ -2759,6 +2755,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
 			CGauge1->Visible = false;
+			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2774,6 +2771,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	Memo1->Update();
 
 	CGauge1->Visible = false;
+	StatusBar1->Update();
 
 	k5_reboot();
 
@@ -2802,7 +2800,7 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 
 	Application->BringToFront();
 	Application->NormalizeTopMosts();
-	OpenDialog1->Title = "Load config file ..";
+	OpenDialog1->Title = "Load configuration file ..";
 	const bool ok = OpenDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
@@ -2937,16 +2935,16 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 
 	for (int i = 0; i < size; i += UVK5_CONFIG_BLOCKSIZE)
 	{
-		const int addr = i;
 		const int len  = UVK5_CONFIG_BLOCKSIZE;
 
-		const int r = k5_write_config(&m_loadfile_data[addr], len, addr);
+		const int r = k5_write_eeprom(&m_loadfile_data[i], len, i);
 		if (r <= 0)
 		{
-			s.printf("error: k5_write_config() [%d]", r);
+			s.printf("error: k5_write_eeprom() [%d]", r);
 			Memo1->Lines->Add(s);
 			Memo1->Lines->Add("");
 			CGauge1->Visible = false;
+			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
 			return;
@@ -2962,6 +2960,7 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 	Memo1->Update();
 
 	CGauge1->Visible = false;
+	StatusBar1->Update();
 
 	k5_reboot();
 
@@ -2979,14 +2978,16 @@ void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
 {
 	const bool enabled = !m_serial.port.connected && (SerialPortComboBox->ItemIndex > 0);
 
-	ReadConfigButton->Enabled    = enabled;
-	WriteConfigButton->Enabled   = enabled;
-	WriteFirmwareButton->Enabled = enabled;
-	ReadADCButton->Enabled       = enabled;
-	ReadRSSIButton->Enabled      = enabled;
+	ReadConfigButton->Enabled       = enabled;
+	WriteConfigButton->Enabled      = enabled;
+	ReadCalibrationButton->Enabled  = enabled;
+	WriteCalibrationButton->Enabled = enabled;
+	WriteFirmwareButton->Enabled    = enabled;
+	ReadADCButton->Enabled          = enabled;
+	ReadRSSIButton->Enabled         = enabled;
 
-	SerialPortComboBox->Enabled  = !m_serial.port.connected;
-	SerialSpeedComboBox->Enabled = !m_serial.port.connected;
+	SerialPortComboBox->Enabled     = !m_serial.port.connected;
+	SerialSpeedComboBox->Enabled    = !m_serial.port.connected;
 }
 
 void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
@@ -3196,5 +3197,367 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 void __fastcall TForm1::SerialSpeedComboBoxSelect(TObject *Sender)
 {
 	SerialPortComboBoxSelect(NULL);
+}
+
+void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
+{
+	String  s;
+
+	if (m_serial.port.connected)
+		return;
+
+	// *******************************************
+	// download the radios calibration data
+
+	Memo1->Clear();
+	Memo1->Lines->Add("");
+	Memo1->Update();
+
+	if (!connect(false))
+		return;
+
+	SerialPortComboBoxChange(NULL);
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Downloading calibration data from the radio ..");
+	Memo1->Update();
+
+	int r = 0;
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
+	{
+		r = k5_hello();
+		if (r != 0)
+			break;
+		Application->ProcessMessages();
+	}
+	Memo1->Lines->Add("");
+	if (r == 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("radio not detected");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+	if (r < 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+
+	const uint32_t calib_addr = UVK5_MAX_CONFIG_SIZE - UVK5_CALIB_SIZE;
+	const int      size       = sizeof(m_calib);
+	const int      block_len  = UVK5_CONFIG_BLOCKSIZE;
+
+	memset(m_calib, 0, sizeof(m_calib));
+
+	CGauge1->MaxValue = size;
+	CGauge1->Progress = 0;
+	CGauge1->Update();
+	CGauge1->Visible = true;
+
+	for (unsigned int i = 0; i < size; i += block_len)
+	{
+		r = k5_read_eeprom(&m_calib[i], block_len, calib_addr + i);
+		if (r <= 0)
+		{
+			s.printf("error: k5_read_eeprom() [%d]", r);
+			Memo1->Lines->Add(s);
+			Memo1->Lines->Add("");
+			CGauge1->Visible = false;
+			StatusBar1->Update();
+			disconnect();
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
+
+		CGauge1->Progress = i + block_len;
+		CGauge1->Update();
+
+		Application->ProcessMessages();
+	}
+
+	Memo1->Lines->Add("read CALIBRATION complete");
+	Memo1->Lines->Add("");
+
+	CGauge1->Visible = false;
+	StatusBar1->Update();
+
+	disconnect();
+
+	SerialPortComboBoxChange(NULL);
+
+	Memo1->Lines->Add("");
+	Memo1->Update();
+
+	// *******************************************
+	// save the radios calibration data
+
+//	if (m_verbose > 0)
+	{	// show the calibration contents
+		Memo1->Lines->BeginUpdate();
+		//Memo1->Lines->Add("");
+		k5_hdump(&m_calib[0], size);
+		Memo1->Lines->EndUpdate();
+		Memo1->Lines->Add("");
+		Memo1->Update();
+	}
+
+	Application->BringToFront();
+	Application->NormalizeTopMosts();
+	SaveDialog2->Title = "Save CALIBRATION data file ..";
+	const bool ok = SaveDialog2->Execute();
+	Application->RestoreTopMosts();
+	if (!ok)
+		return;
+
+	String name = SaveDialog2->FileName;
+	String ext  = ExtractFileExt(name).LowerCase();
+	if (ext.IsEmpty())
+	{
+		ext = ".bin";
+		name += ext;
+	}
+
+	saveFile(name, &m_calib[0], size);
+
+	// *******************************************
+
+	// my calibration data
+	// 001E00  start address
+	// 000000  0A 4B 53 56 59 5C 5F 62 64 66 FF FF FF FF FF FF  .KSVY\_bdfÿÿÿÿÿÿ
+	// 000010  05 46 50 53 56 59 5C 5F 62 64 FF FF FF FF FF FF  .FPSVY\_bdÿÿÿÿÿÿ
+	// 000020  5A 2D 29 26 23 20 1D 1A 17 14 FF FF FF FF FF FF  Z-)&# ....ÿÿÿÿÿÿ
+	// 000030  64 30 2D 29 26 23 20 1D 1A 17 FF FF FF FF FF FF  d0-)&# ...ÿÿÿÿÿÿ
+	// 000040  5A 14 11 0E 0B 08 03 02 02 02 FF FF FF FF FF FF  Z.........ÿÿÿÿÿÿ
+	// 000050  64 11 0E 0B 08 05 05 04 04 04 FF FF FF FF FF FF  d.........ÿÿÿÿÿÿ
+	// 000060  32 68 6B 6E 6F 72 75 77 79 7B FF FF FF FF FF FF  2hknoruwy{ÿÿÿÿÿÿ
+	// 000070  28 64 67 6A 6C 6E 71 73 76 78 FF FF FF FF FF FF  (dgjlnqsvxÿÿÿÿÿÿ
+	// 000080  41 32 2D 28 24 21 1E 1A 17 16 FF FF FF FF FF FF  A2-($!....ÿÿÿÿÿÿ
+	// 000090  46 37 32 2D 28 25 22 1E 1B 19 FF FF FF FF FF FF  F72-(%"...ÿÿÿÿÿÿ
+	// 0000A0  5A 19 0F 0A 09 08 07 06 05 04 FF FF FF FF FF FF  Z.........ÿÿÿÿÿÿ
+	// 0000B0  64 1E 14 0F 0D 0C 0B 0A 09 08 FF FF FF FF FF FF  d.........ÿÿÿÿÿÿ
+	// 0000C0  6E 00 78 00 82 00 8C 00 B4 00 BE 00 C8 00 D2 00  n.x.‚.Œ.´.¾.È.Ò.  ???, RSSI calibration
+	// 0000D0  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
+	// 0000E0  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
+	// 0000F0  5F 5F 5F 69 69 69 91 91 8F FF FF FF FF FF FF FF  ___iii‘‘ÿÿÿÿÿÿÿ
+	// 000100  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
+	// 000110  5A 5A 5A 64 64 64 82 82 82 FF FF FF FF FF FF FF  ZZZddd‚‚‚ÿÿÿÿÿÿÿ
+	// 000120  5A 5A 5A 64 64 64 8F 91 8A FF FF FF FF FF FF FF  ZZZddd‘Šÿÿÿÿÿÿÿ
+	// 000130  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
+	// 000140  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF  Ş.ú.E.^.Å.ü.ÿÿÿÿ  battery calibration
+	// 000150  1E 00 32 00 46 00 5A 00 6E 00 82 00 96 00 AA 00  ..2.F.Z.n.‚.–.ª.  VOX calibration
+	// 000160  C8 00 E6 00 FF FF FF FF 14 00 28 00 3C 00 50 00  È.æ.ÿÿÿÿ..(.<.P.
+	// 000170  64 00 78 00 8C 00 A0 00 BE 00 DC 00 FF FF FF FF  d.x.Œ. .¾.Ü.ÿÿÿÿ
+	// 000180  03 08 10 18 1F FF FF FF 04 00 46 00 50 00 2C 0E  .....ÿÿÿ..F.P.,.  MIC gain (dB), BK4819 XTAL low frequency
+	// 000190  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	// 0001A0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	// 0001B0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	// 0001C0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	// 0001D0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	// 0001E0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	// 0001F0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+	// battery calibration
+	// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
+	//
+	//             ADC     V = (760 * ADC) / [3] / 100
+	// [0] 04DE .. 1246 .. 5.021V .. empty battery
+	// [1] 06FA .. 1786 .. 7.197V .. 1 bar
+	// [2] 0745 .. 1861 .. 7.499V .. 2 bar
+	// [3] 075E .. 1886 .. 7.600V .. 3 bar
+	// [4] 07C5 .. 1989 .. 8.015V .. 4 bar
+	// [5] 08FC .. 2300 .. 9.268V .. overwritten by radio to 2300
+	// [6] FFFF
+	// [7] FFFF
+	//
+	// actual bat volt = (760 * ADC) / [3] / 100
+
+	// *******************************************
+}
+
+void __fastcall TForm1::StatusBar1Resize(TObject *Sender)
+{
+	const int panel = 2;
+
+	int x = StatusBar1->Left;
+	for (int i = 0; i < StatusBar1->Panels->Count; i++)
+		if (i < panel)
+			x += StatusBar1->Panels->Items[i]->Width;
+
+	StatusBar1->Panels->Items[panel]->Width = StatusBar1->Width - x;
+
+	RECT Rect;
+	StatusBar1->Perform(SB_GETRECT, 0, (LPARAM)&Rect);
+
+	CGauge1->Top    = Rect.top + 4;
+	CGauge1->Left   = x + 10;
+	CGauge1->Width  = StatusBar1->Panels->Items[panel]->Width - 36;
+	CGauge1->Height = Rect.bottom - Rect.top - 8;
+}
+
+void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
+{
+	String s;
+
+	if (m_serial.port.connected)
+		return;
+
+	// *******************************************
+	// load the firmware file in
+
+	Application->BringToFront();
+	Application->NormalizeTopMosts();
+	OpenDialog2->Title = "Select a CALIBRATION file to upload";
+	const bool ok = OpenDialog2->Execute();
+	Application->RestoreTopMosts();
+	if (!ok)
+		return;
+
+	String name = OpenDialog2->FileName;
+	String ext  = ExtractFileExt(name).LowerCase();
+	if (ext.IsEmpty())
+	{
+		ext = ".bin";
+		name += ext;
+	}
+
+	if (loadFile(name) == 0)
+	{
+		Application->BringToFront();
+		Application->NormalizeTopMosts();
+		Application->MessageBox("No data loaded", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+		Application->RestoreTopMosts();
+		return;
+	}
+
+	Memo1->Clear();
+	Memo1->Lines->Add("");
+
+	s.printf("Loaded %u (0x%04X) bytes (max 0x%04X) from '%s'", m_loadfile_data.size(), m_loadfile_data.size(), UVK5_FLASH_SIZE, m_loadfile_name.c_str());
+	Memo1->Lines->Add(s);
+	Memo1->Update();
+
+	if (m_loadfile_data.size() != UVK5_CALIB_SIZE)
+	{
+		Application->BringToFront();
+		Application->NormalizeTopMosts();
+		Application->MessageBox("File size is invalid", Application->Title.c_str(), MB_ICONERROR | MB_OK);
+		Application->RestoreTopMosts();
+		return;
+	}
+
+	if (m_verbose > 2)
+	{	// show the files contents - takes a short while to display
+		Memo1->Lines->BeginUpdate();
+		Memo1->Lines->Add("");
+		k5_hdump(&m_loadfile_data[0], m_loadfile_data.size());
+		Memo1->Lines->EndUpdate();
+	}
+
+	// *******************************************
+	// upload the calibration data to the radio
+
+	Memo1->Lines->Add("");
+
+	if (!connect(false))
+		return;
+
+	SerialPortComboBoxChange(NULL);
+
+	Memo1->Lines->Add("");
+	Memo1->Lines->Add("Uploading calibration data to the radio ..");
+	Memo1->Update();
+
+	int r = 0;
+	for (int i = 0; i < UVK5_HELLO_TRIES; i++)
+	{
+		r = k5_hello();
+		if (r != 0)
+			break;
+		Application->ProcessMessages();
+	}
+	Memo1->Lines->Add("");
+	if (r == 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("radio not detected");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+	if (r < 0)
+	{
+		disconnect();
+		Memo1->Lines->Add("");
+		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+
+	if (m_verbose > 2)
+	{	//	show the files contents - takes a short while to display
+		Memo1->Lines->BeginUpdate();
+		Memo1->Lines->Add("");
+		k5_hdump(&m_loadfile_data[0], m_loadfile_data.size());
+		Memo1->Lines->EndUpdate();
+		Memo1->Lines->Add("");
+	}
+
+	Memo1->Lines->Add("writing config area ..");
+
+	const uint32_t calib_addr = UVK5_MAX_CONFIG_SIZE - UVK5_CALIB_SIZE;
+
+	int size = m_loadfile_data.size();
+
+	CGauge1->MaxValue = size;
+	CGauge1->Progress = 0;
+	CGauge1->Visible = true;
+	CGauge1->Update();
+
+	for (int i = 0; i < size; i += UVK5_CONFIG_BLOCKSIZE)
+	{
+		const int len  = UVK5_CONFIG_BLOCKSIZE;
+
+		const int r = k5_write_eeprom(&m_loadfile_data[i], len, calib_addr + i);
+		if (r <= 0)
+		{
+			s.printf("error: k5_write_eeprom() [%d]", r);
+			Memo1->Lines->Add(s);
+			Memo1->Lines->Add("");
+			CGauge1->Visible = false;
+			StatusBar1->Update();
+			disconnect();
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
+
+		CGauge1->Progress = i + len;
+		CGauge1->Update();
+
+		Application->ProcessMessages();
+	}
+
+	Memo1->Lines->Add("write CALIBRATION complete");
+	Memo1->Update();
+
+	CGauge1->Visible = false;
+	StatusBar1->Update();
+
+	k5_reboot();
+
+	// give the serial port time to send the packet
+	Sleep(100);
+
+	Memo1->Lines->Add("");
+
+	disconnect();
+
+	SerialPortComboBoxChange(NULL);
+
+	// *******************************************
 }
 
