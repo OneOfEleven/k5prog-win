@@ -100,6 +100,105 @@ struct k5_command
 
 // ******************************************************************************
 
+// my calibration data UV-K5(8) 1
+//
+// 001E00  eeprom start address
+//
+// offset  00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+// -------------------------------------------------------
+// 000000  0A 4B 53 56 59 5C 5F 62 64 66 FF FF FF FF FF FF
+// 000010  05 46 50 53 56 59 5C 5F 62 64 FF FF FF FF FF FF
+// 000020  5A 2D 29 26 23 20 1D 1A 17 14 FF FF FF FF FF FF
+// 000030  64 30 2D 29 26 23 20 1D 1A 17 FF FF FF FF FF FF
+// 000040  5A 14 11 0E 0B 08 03 02 02 02 FF FF FF FF FF FF
+// 000050  64 11 0E 0B 08 05 05 04 04 04 FF FF FF FF FF FF
+// 000060  32 68 6B 6E 6F 72 75 77 79 7B FF FF FF FF FF FF
+// 000070  28 64 67 6A 6C 6E 71 73 76 78 FF FF FF FF FF FF
+// 000080  41 32 2D 28 24 21 1E 1A 17 16 FF FF FF FF FF FF
+// 000090  46 37 32 2D 28 25 22 1E 1B 19 FF FF FF FF FF FF
+// 0000A0  5A 19 0F 0A 09 08 07 06 05 04 FF FF FF FF FF FF
+// 0000B0  64 1E 14 0F 0D 0C 0B 0A 09 08 FF FF FF FF FF FF
+// 0000C0  6E 00 78 00 82 00 8C 00 B4 00 BE 00 C8 00 D2 00
+// 0000D0  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF
+// 0000E0  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF
+// 0000F0  5F 5F 5F 69 69 69 91 91 8F FF FF FF FF FF FF FF
+// 000100  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF
+// 000110  5A 5A 5A 64 64 64 82 82 82 FF FF FF FF FF FF FF
+// 000120  5A 5A 5A 64 64 64 8F 91 8A FF FF FF FF FF FF FF
+// 000130  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF
+// 000140  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
+// 000150  1E 00 32 00 46 00 5A 00 6E 00 82 00 96 00 AA 00
+// 000160  C8 00 E6 00 FF FF FF FF 14 00 28 00 3C 00 50 00
+// 000170  64 00 78 00 8C 00 A0 00 BE 00 DC 00 FF FF FF FF
+// 000180  03 08 0E 13 18 FF FF FF 04 00 46 00 50 00 2C 0E
+// 000190  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+// 0001A0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+// 0001B0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+// 0001C0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+// 0001D0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+// 0001E0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+// 0001F0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+
+#pragma pack(push, 1)
+// starts at eeprom address 0x01E00
+//typedef struct __attribute__((packed, aligned(1)))
+typedef struct
+{
+	struct                                      // 0x0000
+	{
+		uint8_t open_rssi_thresh[10];
+		uint8_t unused1[6];
+
+		uint8_t close_rssi_thresh[10];
+		uint8_t unused2[6];
+
+		uint8_t open_noise_thresh[10];
+		uint8_t unused3[6];
+
+		uint8_t close_noise_thresh[10];
+		uint8_t unused4[6];
+
+		uint8_t open_glitch_thresh[10];
+		uint8_t unused5[6];
+
+		uint8_t close_glitch_thresh[10];
+		uint8_t unused6[6];
+	} squelch[2];
+
+	uint16_t unknown1[4];                      // 0x00C0
+	uint16_t rssi[4];                          // 0x00C8
+
+	struct                                     // 0x00D0
+	{
+		uint8_t low_tx_pwr[3];
+		uint8_t mid_tx_pwr[3];
+		uint8_t high_tx_pwr[3];
+		uint8_t unused[7];
+	} band_setting[7];
+
+	uint16_t battery[6];                       // 0x0140
+	uint8_t  unused1[4];
+
+	struct                                     // 0x0150
+	{
+		uint16_t threshold[10];
+		uint8_t  unused[4];
+	} vox[2];
+
+	uint8_t  mic_gain_dB2[5];                  // 0x0180
+	uint8_t  unused4[3];
+
+	int16_t  bk4819_xtal_freq_low;             // 0x0188
+	uint16_t unknown2;
+	uint16_t unknown3;
+	uint8_t  volume_gain;
+	uint8_t  dac_gain;
+
+} t_calibration;
+#pragma pack(pop)
+
+// ******************************************************************************
+
 typedef void __fastcall (__closure *mainForm_threadProcess)();
 
 class CThread : public TThread

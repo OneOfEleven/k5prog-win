@@ -94,7 +94,9 @@ void __fastcall GetLastErrorStr(DWORD err, char *err_str, int max_size)
 
 CSerialPort::CSerialPort()
 {
-	m_mutex = ::CreateMutex(NULL, TRUE, NULL);
+	m_device_handle = INVALID_HANDLE_VALUE;
+	m_mutex         = ::CreateMutex(NULL, TRUE, NULL);
+	m_thread        = NULL;
 
 	m_last_error = ERROR_SUCCESS;
 	memset(m_last_error_str, 0, sizeof(m_last_error_str));
@@ -105,8 +107,6 @@ CSerialPort::CSerialPort()
 	m_tx.overlapped.hEvent  = INVALID_HANDLE_VALUE;
 	m_rx.overlapped_waiting = false;
 	m_tx.overlapped_waiting = false;
-
-	m_device_handle = INVALID_HANDLE_VALUE;
 
 	GetSerialPortList();
 
@@ -161,55 +161,79 @@ CSerialPort::CSerialPort()
 	m_rx.overlapped_waiting = false;
 	m_tx.overlapped_waiting = false;
 
-	m_thread = new CSerialPortThread(&threadProcess);
+/*
+	#ifdef USE_THREAD
+		m_thread = new CSerialPortThread(&threadProcess);
+	#else
+		m_thread = NULL;
+	#endif
+*/
 }
 
 CSerialPort::~CSerialPort()
 {
 	if (m_thread != NULL)
 	{
-		m_thread->Terminate();
-		m_thread->WaitFor();
-		delete m_thread;
+		if (!m_thread->FreeOnTerminate)
+		{
+			m_thread->Terminate();
+			m_thread->WaitFor();
+			delete m_thread;
+		}
+		else
+			m_thread->Terminate();
 		m_thread = NULL;
 	}
 
 	Disconnect();
 
-	::CloseHandle(m_mutex);
+	if (m_mutex != NULL)
+		::CloseHandle(m_mutex);
 	m_mutex = NULL;
 }
 
 void __fastcall CSerialPort::clearErrors()
 {
-	const DWORD res = ::WaitForSingleObject(m_mutex, 100);
+	#ifdef USE_THREAD
+		const DWORD res = ::WaitForSingleObject(m_mutex, 100);
+	#endif
 
 	m_errors.resize(0);
 
-	if (res == WAIT_OBJECT_0)
-		::ReleaseMutex(m_mutex);
+	#ifdef USE_THREAD
+		if (res == WAIT_OBJECT_0)
+			::ReleaseMutex(m_mutex);
+	#endif
 }
 
 void __fastcall CSerialPort::pushError(const DWORD error, STRING leading_text)
 {
-	const DWORD res = ::WaitForSingleObject(m_mutex, 10);
+	#ifdef USE_THREAD
+		const DWORD res = ::WaitForSingleObject(m_mutex, 10);
+	#endif
 
 	m_last_error = error;
 	GetLastErrorStr(error, m_last_error_str, sizeof(m_last_error_str));
 	m_errors.push_back(leading_text + STRING(m_last_error_str));
 
-	if (res == WAIT_OBJECT_0)
-		::ReleaseMutex(m_mutex);
+	#ifdef USE_THREAD
+		if (res == WAIT_OBJECT_0)
+			::ReleaseMutex(m_mutex);
+	#endif
 }
 
 unsigned int __fastcall CSerialPort::errorCount()
 {
-	const DWORD res = ::WaitForSingleObject(m_mutex, 10);
+	#ifdef USE_THREAD
+		const DWORD res = ::WaitForSingleObject(m_mutex, 10);
+	#endif
 
 	const unsigned int size = m_errors.size();
 
-	if (res == WAIT_OBJECT_0)
-		::ReleaseMutex(m_mutex);
+	#ifdef USE_THREAD
+		if (res == WAIT_OBJECT_0)
+			::ReleaseMutex(m_mutex);
+	#endif
 
 	return size;
 }
@@ -218,7 +242,9 @@ STRING __fastcall CSerialPort::pullError()
 {
 	STRING s;
 
-	const DWORD res = ::WaitForSingleObject(m_mutex, 100);
+	#ifdef USE_THREAD
+		const DWORD res = ::WaitForSingleObject(m_mutex, 100);
+	#endif
 
 	if (!m_errors.empty())
 	{
@@ -226,8 +252,10 @@ STRING __fastcall CSerialPort::pullError()
 		m_errors.erase(m_errors.begin() + 0);
 	}
 
-	if (res == WAIT_OBJECT_0)
-		::ReleaseMutex(m_mutex);
+	#ifdef USE_THREAD
+		if (res == WAIT_OBJECT_0)
+			::ReleaseMutex(m_mutex);
+	#endif
 
 	return s;
 }
@@ -478,8 +506,12 @@ int __fastcall CSerialPort::Connect(STRING device_name, const bool use_overlappe
 	if (::GetCommModemStatus(m_device_handle, &m_modem_state_read) == FALSE)
 		pushError(::GetLastError(), "connect GetCommModemStatus ");
 
-	if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
-		pushError(::GetLastError(), "connect SetCommState ");
+	#if 1
+		::SetCommState(m_device_handle, &m_dcb);
+	#else
+		if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
+			pushError(::GetLastError(), "connect SetCommState ");
+	#endif
 
 	if (::SetCommTimeouts(m_device_handle, &m_timeouts) == FALSE)
 		pushError(::GetLastError(), "connect SetCommTimeouts ");
@@ -516,11 +548,28 @@ int __fastcall CSerialPort::Connect(STRING device_name, const bool use_overlappe
 		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
 	}
 
+	#ifdef USE_THREAD
+		m_thread = new CSerialPortThread(&threadProcess);
+	#endif
+
 	return ERROR_SUCCESS;	// OK
 }
 
 void __fastcall CSerialPort::Disconnect()
 {
+	if (m_thread != NULL)
+	{
+		if (!m_thread->FreeOnTerminate)
+		{
+			m_thread->Terminate();
+			m_thread->WaitFor();
+			delete m_thread;
+		}
+		else
+			m_thread->Terminate();
+		m_thread = NULL;
+	}
+
 	const HANDLE handle = m_device_handle;
 	m_device_handle = INVALID_HANDLE_VALUE;	// stops the thread accessing the serial port
 
@@ -797,9 +846,13 @@ int __fastcall CSerialPort::RxBytesAvailable()
 	if (m_device_handle == INVALID_HANDLE_VALUE)
 		return -1;
 
+#ifdef USE_THREAD
 	const int wr = m_rx.buffer_wr;
 	const int rd = m_rx.buffer_rd;
 	return (wr >= rd) ? wr - rd : (m_rx.buffer.size() - rd) + wr;
+#else
+
+#endif
 }
 
 int __fastcall CSerialPort::RxByte()
@@ -807,6 +860,7 @@ int __fastcall CSerialPort::RxByte()
 	if (m_device_handle == INVALID_HANDLE_VALUE)
 		return -1;
 
+#ifdef USE_THREAD
 	const int wr = m_rx.buffer_wr;
 
 	int rd = m_rx.buffer_rd;
@@ -818,22 +872,12 @@ int __fastcall CSerialPort::RxByte()
 		rd -= m_rx.buffer.size();
 
 	m_rx.buffer_rd = rd;
+#else
+
+
+#endif
 
 	return i;
-}
-
-int __fastcall CSerialPort::RxBytePeek()
-{	// fetch a byte without removing it from the rx buffer
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-	const int wr = m_rx.buffer_wr;
-
-	int rd = m_rx.buffer_rd;
-	if (rd == wr)
-		return -2;
-
-	return (int)m_rx.buffer[rd];
 }
 
 int __fastcall CSerialPort::RxBytes(void *buf, int size)
@@ -841,6 +885,7 @@ int __fastcall CSerialPort::RxBytes(void *buf, int size)
 	if (m_device_handle == INVALID_HANDLE_VALUE)
 		return -1;
 
+#ifdef USE_THREAD
 	uint8_t *buffer = (uint8_t *)buf;
 	int bytes_written = 0;
 
@@ -862,6 +907,26 @@ int __fastcall CSerialPort::RxBytes(void *buf, int size)
 	}
 
 	return bytes_written;
+#else
+
+
+#endif
+}
+
+#ifdef USE_THREAD
+
+int __fastcall CSerialPort::RxBytePeek()
+{	// fetch a byte without removing it from the rx buffer
+	if (m_device_handle == INVALID_HANDLE_VALUE)
+		return -1;
+
+	const int wr = m_rx.buffer_wr;
+
+	int rd = m_rx.buffer_rd;
+	if (rd == wr)
+		return -2;
+
+	return (int)m_rx.buffer[rd];
 }
 
 int __fastcall CSerialPort::RxBytesPeek(void *buf, int size)
@@ -909,11 +974,14 @@ int __fastcall CSerialPort::TxBytesWaiting()
 	return bytes_available;
 }
 
+#endif
+
 int __fastcall CSerialPort::TxByte(const int b)
 {
 	if (m_device_handle == INVALID_HANDLE_VALUE)
 		return -1;
 
+#ifdef USE_THREAD
 	const int buf_rd = m_tx.buffer_rd;
 	int       buf_wr = m_tx.buffer_wr;
 	int space_available = (buf_wr >= buf_rd) ? (int)m_tx.buffer.size() - (buf_wr - buf_rd) : buf_rd - buf_wr;
@@ -927,6 +995,9 @@ int __fastcall CSerialPort::TxByte(const int b)
 		buf_wr -= m_tx.buffer.size();
 
 	m_tx.buffer_wr = buf_wr;
+#else
+
+#endif
 
 	return 1;
 }
@@ -939,6 +1010,7 @@ int __fastcall CSerialPort::TxBytes(const void *buf, int bytes)
 	if (buf == NULL || bytes <= 0)
 		return 0;
 
+#ifdef USE_THREAD
 	uint8_t *buffer = (uint8_t *)buf;
 
 	const int buf_rd = m_tx.buffer_rd;
@@ -966,6 +1038,9 @@ int __fastcall CSerialPort::TxBytes(const void *buf, int bytes)
 	}
 
 	m_tx.buffer_wr = buf_wr;
+
+#else
+#endif
 
 	return bytes_written;
 }

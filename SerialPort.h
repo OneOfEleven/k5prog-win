@@ -51,7 +51,8 @@
 	#error "FIX ME"
 #endif
 
-#define SERIAL_OVERLAPPED
+//#define SERIAL_OVERLAPPED
+#define USE_THREAD
 
 #pragma option push
 #pragma warn -8027
@@ -86,7 +87,7 @@ class CSerialPortThread : public TThread
 			TThread(false)
 		{
 			Priority        = tpNormal;
-			FreeOnTerminate = false;
+			FreeOnTerminate = true;
 			m_process       = process;
 		}
 		virtual __fastcall ~CSerialPortThread()
@@ -166,6 +167,7 @@ private:
 	void __fastcall processRx();
 	void __fastcall threadProcess();
 
+#ifdef USE_THREAD
 	int __fastcall RxBytesAvailable();
 	int __fastcall RxByte();
 	int __fastcall RxBytePeek();
@@ -173,6 +175,7 @@ private:
 	bool __fastcall TxEmpty();
 	int __fastcall TxBytesWaiting();
 	int __fastcall TxByte(const int b);
+#endif
 
 	int __fastcall GetBaudRate();
 	void __fastcall SetBaudRate(int value);
@@ -223,11 +226,13 @@ public:
 
 	__property int rxBytesAvailable = {read = RxBytesAvailable};
 	__property int rxByte           = {read = RxByte};
+#ifdef USE_THREAD
 	__property int rxBytePeek       = {read = RxBytePeek};
 
 	__property bool txEmpty         = {read = TxEmpty};
 	__property int txBytesWaiting   = {read = TxBytesWaiting};
 	__property int txByte           = {write = TxByte};
+#endif
 
 	__property int baudRate         = {read = GetBaudRate, write = SetBaudRate};
 	__property int byteSize         = {read = GetByteSize, write = SetByteSize};

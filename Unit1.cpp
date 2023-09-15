@@ -646,13 +646,10 @@ void __fastcall TForm1::disconnect()
 			m_thread->Terminate();
 			m_thread->WaitFor();
 			delete m_thread;
-			m_thread = NULL;
 		}
 		else
-		{
 			m_thread->Terminate();
-			m_thread = NULL;
-		}
+		m_thread = NULL;
 	}
 
 	if (m_serial.port.connected)
@@ -984,6 +981,9 @@ void __fastcall TForm1::FormKeyDown(TObject *Sender, WORD &Key,
 void __fastcall TForm1::Timer1Timer(TObject *Sender)
 {
 	String s;
+
+	// **************************
+
 	bool updated = false;
 
 	s = FormatDateTime(" dddd dd mmm yyyy  hh:nn:ss", Now());
@@ -1005,6 +1005,16 @@ void __fastcall TForm1::Timer1Timer(TObject *Sender)
 
 	if (updated)
 		StatusBar1->Update();
+
+	// **************************
+
+	while (m_serial.port.errorCount() > 0)
+	{
+		s = m_serial.port.pullError();
+		Memo1->Lines->Add("serial error: " + s);
+	}
+
+	// **************************
 }
 
 int __fastcall TForm1::saveFile(String filename, const uint8_t *data, const size_t size)
@@ -1552,7 +1562,11 @@ int __fastcall TForm1::k5_send_cmd(struct k5_command *cmd)
 		k5_hex_dump2(cmd, true);
 
 	if (cmd->obfuscated_cmd != NULL && cmd->obfuscated_len > 0)
-		m_serial.port.TxBytes(cmd->obfuscated_cmd, cmd->obfuscated_len);
+	{
+		const int num_sent = m_serial.port.TxBytes(cmd->obfuscated_cmd, cmd->obfuscated_len);
+		if (num_sent != cmd->obfuscated_len)
+			return -2;
+	}
 
 	return 1;
 }
@@ -2335,7 +2349,7 @@ int __fastcall TForm1::k5_reboot()
 	buffer[2] = ((0) >> 0) & 0xff;         // LS-Byte size
 	buffer[3] = ((0) >> 8) & 0xff;         // MS-Byte size
 
-	if (m_verbose > 0)
+//	if (m_verbose > 0)
 	{
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("sending reboot radio ..");
@@ -3326,55 +3340,27 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 
 	// *******************************************
 
-	// my calibration data
-	// 001E00  start address
-	// 000000  0A 4B 53 56 59 5C 5F 62 64 66 FF FF FF FF FF FF  .KSVY\_bdfÿÿÿÿÿÿ
-	// 000010  05 46 50 53 56 59 5C 5F 62 64 FF FF FF FF FF FF  .FPSVY\_bdÿÿÿÿÿÿ
-	// 000020  5A 2D 29 26 23 20 1D 1A 17 14 FF FF FF FF FF FF  Z-)&# ....ÿÿÿÿÿÿ
-	// 000030  64 30 2D 29 26 23 20 1D 1A 17 FF FF FF FF FF FF  d0-)&# ...ÿÿÿÿÿÿ
-	// 000040  5A 14 11 0E 0B 08 03 02 02 02 FF FF FF FF FF FF  Z.........ÿÿÿÿÿÿ
-	// 000050  64 11 0E 0B 08 05 05 04 04 04 FF FF FF FF FF FF  d.........ÿÿÿÿÿÿ
-	// 000060  32 68 6B 6E 6F 72 75 77 79 7B FF FF FF FF FF FF  2hknoruwy{ÿÿÿÿÿÿ
-	// 000070  28 64 67 6A 6C 6E 71 73 76 78 FF FF FF FF FF FF  (dgjlnqsvxÿÿÿÿÿÿ
-	// 000080  41 32 2D 28 24 21 1E 1A 17 16 FF FF FF FF FF FF  A2-($!....ÿÿÿÿÿÿ
-	// 000090  46 37 32 2D 28 25 22 1E 1B 19 FF FF FF FF FF FF  F72-(%"...ÿÿÿÿÿÿ
-	// 0000A0  5A 19 0F 0A 09 08 07 06 05 04 FF FF FF FF FF FF  Z.........ÿÿÿÿÿÿ
-	// 0000B0  64 1E 14 0F 0D 0C 0B 0A 09 08 FF FF FF FF FF FF  d.........ÿÿÿÿÿÿ
-	// 0000C0  6E 00 78 00 82 00 8C 00 B4 00 BE 00 C8 00 D2 00  n.x.‚.Œ.´.¾.È.Ò.  ???, RSSI calibration
-	// 0000D0  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
-	// 0000E0  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
-	// 0000F0  5F 5F 5F 69 69 69 91 91 8F FF FF FF FF FF FF FF  ___iii‘‘ÿÿÿÿÿÿÿ
-	// 000100  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
-	// 000110  5A 5A 5A 64 64 64 82 82 82 FF FF FF FF FF FF FF  ZZZddd‚‚‚ÿÿÿÿÿÿÿ
-	// 000120  5A 5A 5A 64 64 64 8F 91 8A FF FF FF FF FF FF FF  ZZZddd‘Šÿÿÿÿÿÿÿ
-	// 000130  32 32 32 64 64 64 8C 8C 8C FF FF FF FF FF FF FF  222dddŒŒŒÿÿÿÿÿÿÿ
-	// 000140  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF  Ş.ú.E.^.Å.ü.ÿÿÿÿ  battery calibration
-	// 000150  1E 00 32 00 46 00 5A 00 6E 00 82 00 96 00 AA 00  ..2.F.Z.n.‚.–.ª.  VOX calibration
-	// 000160  C8 00 E6 00 FF FF FF FF 14 00 28 00 3C 00 50 00  È.æ.ÿÿÿÿ..(.<.P.
-	// 000170  64 00 78 00 8C 00 A0 00 BE 00 DC 00 FF FF FF FF  d.x.Œ. .¾.Ü.ÿÿÿÿ
-	// 000180  03 08 10 18 1F FF FF FF 04 00 46 00 50 00 2C 0E  .....ÿÿÿ..F.P.,.  MIC gain (dB), BK4819 XTAL low frequency
-	// 000190  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
-	// 0001A0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
-	// 0001B0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
-	// 0001C0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
-	// 0001D0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
-	// 0001E0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
-	// 0001F0  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+	{
+//		t_calibration *calibration = (t_calibration *)&m_calib;
 
-	// battery calibration
-	// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
-	//
-	//             ADC     V = (760 * ADC) / [3] / 100
-	// [0] 04DE .. 1246 .. 5.021V .. empty battery
-	// [1] 06FA .. 1786 .. 7.197V .. 1 bar
-	// [2] 0745 .. 1861 .. 7.499V .. 2 bar
-	// [3] 075E .. 1886 .. 7.600V .. 3 bar
-	// [4] 07C5 .. 1989 .. 8.015V .. 4 bar
-	// [5] 08FC .. 2300 .. 9.268V .. overwritten by radio to 2300
-	// [6] FFFF
-	// [7] FFFF
-	//
-	// actual bat volt = (760 * ADC) / [3] / 100
+
+
+
+		// battery calibration
+		// 0x1F40  DE 04 FA 06 45 07 5E 07 C5 07 FC 08 FF FF FF FF
+		//
+		//             ADC     V = (760 * ADC) / [3] / 100
+		// [0] 04DE .. 1246 .. 5.021V .. empty battery
+		// [1] 06FA .. 1786 .. 7.197V .. 1 bar
+		// [2] 0745 .. 1861 .. 7.499V .. 2 bar
+		// [3] 075E .. 1886 .. 7.600V .. 3 bar
+		// [4] 07C5 .. 1989 .. 8.015V .. 4 bar
+		// [5] 08FC .. 2300 .. 9.268V .. overwritten by radio to 2300
+		// [6] FFFF
+		// [7] FFFF
+		//
+		// actual battery volt = (760 * ADC) / [3] / 100
+	}
 
 	// *******************************************
 }
