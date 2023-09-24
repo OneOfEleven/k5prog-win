@@ -1860,10 +1860,10 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 //	if (m_verbose > 0)
 	{
-		s.printf("sending firmware version '%s' ..", ver);
+//		s.printf("sending firmware version '%s' ..", ver);
 //		Memo1->Lines->Add("");
-		Memo1->Lines->Add(s);
-		Memo1->Update();
+//		Memo1->Lines->Add(s);
+//		Memo1->Update();
 	}
 
 	const int r = k5_send_buf(buffer, 4 + 16);
@@ -1904,11 +1904,11 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 
 		clearRxPacket0();			// remove spent packet
 
-		return 1;
+		return 1;   // all OK
 	}
 
-//	if (m_verbose > 1)
-		Memo1->Lines->Add("error: no valid packet received");
+	s.printf("error: no valid packet received, bootloader refused firmware version '%s' ..", ver);
+	Memo1->Lines->Add(s);
 
 	return 0;
 }
@@ -2727,8 +2727,8 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	{
 		if (m_firmware_ver[1] >= '0' && m_firmware_ver[1] <= '9')
 			if (m_firmware_ver[2] == '.' && m_bootloader_ver[2] == '.')
-				if (m_firmware_ver[1] > m_bootloader_ver[1])
-//				if (m_firmware_ver[1] != m_bootloader_ver[1])
+//				if (m_firmware_ver[1] > m_bootloader_ver[1])
+				if (m_firmware_ver[1] != m_bootloader_ver[1])
 					m_firmware_ver[1] = '*';
 	}
 	else
