@@ -3156,8 +3156,8 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 	Memo1->Lines->Add("Fetching radio details ..");
 	Memo1->Update();
 
-	const int verbose = m_verbose;
-	m_verbose = 0;
+//	const int verbose = m_verbose;
+//	m_verbose = 0;
 
 	int r;
 	for (int i = 0; i < 2; i++)
@@ -3178,7 +3178,7 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 		else
 			Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
-		m_verbose = verbose;
+//		m_verbose = verbose;
 		return;
 	}
 	if (r == 0)
@@ -3188,7 +3188,7 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
-		m_verbose = verbose;
+//		m_verbose = verbose;
 		return;
 	}
 	if (r > 0)
@@ -3198,14 +3198,14 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio is in user mode");
 		SerialPortComboBoxChange(NULL);
-		m_verbose = verbose;
+//		m_verbose = verbose;
 		return;
 	}
 
 	disconnect();
 	SerialPortComboBoxChange(NULL);
 
-	m_verbose = verbose;
+//	m_verbose = verbose;
 }
 
 void __fastcall TForm1::SerialSpeedComboBoxSelect(TObject *Sender)
