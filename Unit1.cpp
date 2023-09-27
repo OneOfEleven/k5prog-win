@@ -1956,6 +1956,8 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 		Memo1->Update();
 	}
 
+	const uint16_t flash_max_block_addr = (firmware_size & 0xff) ? (firmware_size & 0xff00) + UVK5_FLASH_BLOCKSIZE : firmware_size & 0xff00;
+
 	memset(buffer, 0, sizeof(buffer));
 
 	buffer[ 0] = 0x19;                      // LS-Byte command
@@ -1970,12 +1972,14 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 
 	buffer[ 8] = (offset >> 8) & 0xff;
 	buffer[ 9] = (offset >> 0) & 0xff;
-	buffer[10] = 0xF0;
-//	buffer[10] = ((firmware_size + 255) >> 8) & 0xff;
+//	buffer[10] = 0xF0;
+	buffer[10] = (flash_max_block_addr >> 8) & 0xff;
 	buffer[11] = 0x00;
 
-	buffer[12] = (len >> 8) & 0xff;
-	buffer[13] = (len >> 0) & 0xff;
+//	buffer[12] = (len >> 8) & 0xff;
+//	buffer[13] = (len >> 0) & 0xff;
+	buffer[12] = (len >> 0) & 0xff;
+	buffer[13] = (len >> 8) & 0xff;
 	buffer[14] = 0x00;
 	buffer[15] = 0x00;
 
@@ -2339,7 +2343,7 @@ int __fastcall TForm1::k5_readRSSI()
 
 int __fastcall TForm1::k5_reboot()
 {
-	uint8_t buffer[8];
+	uint8_t buffer[4];
 
 	if (!m_serial.port.connected)
 		return 0;
@@ -2788,9 +2792,14 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	StatusBar1->Update();
 
 	k5_reboot();
-
-	// give the serial port time to complete the data TX
-	Sleep(100);
+	{	// give the serial port time to complete the data TX
+		const DWORD tick = GetTickCount();
+		while ((GetTickCount() - tick) < 300)
+		{
+			Application->ProcessMessages();
+			Sleep(1);
+		}
+	}
 
 	Memo1->Lines->Add("");
 
@@ -2977,9 +2986,14 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 	StatusBar1->Update();
 
 	k5_reboot();
-
-	// give the serial port time to send the packet
-	Sleep(100);
+	{	// give the serial port time to complete the data TX
+		const DWORD tick = GetTickCount();
+		while ((GetTickCount() - tick) < 300)
+		{
+			Application->ProcessMessages();
+			Sleep(1);
+		}
+	}
 
 	Memo1->Lines->Add("");
 
@@ -3156,10 +3170,53 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 	Memo1->Lines->Add("Fetching radio details ..");
 	Memo1->Update();
 
-//	const int verbose = m_verbose;
-//	m_verbose = 0;
+	int r = k5_wait_flash_message();
+	if (r <= 0)
+	{	// radio is either turned off or is not in firmware update mode
 
-	int r;
+		for (int i = 0; i < UVK5_HELLO_TRIES; i++)
+		{
+			r = k5_hello();
+			if (r != 0)
+				break;
+			Application->ProcessMessages();
+		}
+		Memo1->Lines->Add("");
+		if (r == 0)
+		{
+			disconnect();
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("radio not detected");
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
+		if (r > 0)
+		{
+			disconnect();
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("error: radio is in user mode");
+			SerialPortComboBoxChange(NULL);
+			return;
+		}
+	}
+	else
+	{
+		disconnect();
+
+		Memo1->Lines->Add("");
+		if (r > 0)
+			Memo1->Lines->Add("radio is in firmware update mode");
+		else
+			Memo1->Lines->Add("radio not detected");
+
+		SerialPortComboBoxChange(NULL);
+		return;
+	}
+
+/*
+
+
+
 	for (int i = 0; i < 2; i++)
 	{
 		r = k5_hello();
@@ -3167,45 +3224,53 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 			break;
 		Application->ProcessMessages();
 	}
+
 	if (r < 0)
 	{
 		r = k5_wait_flash_message();
 		Memo1->Lines->Add("");
+
 		disconnect();
+
 		Memo1->Lines->Add("");
 		if (r > 0)
 			Memo1->Lines->Add("radio is in firmware update mode");
 		else
 			Memo1->Lines->Add("radio not detected");
+
 		SerialPortComboBoxChange(NULL);
-//		m_verbose = verbose;
 		return;
 	}
+
 	if (r == 0)
 	{
 		Memo1->Lines->Add("");
+
 		disconnect();
+
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio not detected");
+
 		SerialPortComboBoxChange(NULL);
-//		m_verbose = verbose;
 		return;
 	}
+
 	if (r > 0)
 	{
 		Memo1->Lines->Add("");
+
 		disconnect();
+
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio is in user mode");
+
 		SerialPortComboBoxChange(NULL);
-//		m_verbose = verbose;
 		return;
 	}
-
+*/
 	disconnect();
-	SerialPortComboBoxChange(NULL);
 
-//	m_verbose = verbose;
+	SerialPortComboBoxChange(NULL);
 }
 
 void __fastcall TForm1::SerialSpeedComboBoxSelect(TObject *Sender)
@@ -3534,9 +3599,14 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 	StatusBar1->Update();
 
 	k5_reboot();
-
-	// give the serial port time to send the packet
-	Sleep(100);
+	{	// give the serial port time to complete the data TX
+		const DWORD tick = GetTickCount();
+		while ((GetTickCount() - tick) < 300)
+		{
+			Application->ProcessMessages();
+			Sleep(1);
+		}
+	}
 
 	Memo1->Lines->Add("");
 
