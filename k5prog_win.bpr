@@ -62,11 +62,11 @@ IncludeVerInfo=1
 AutoIncBuild=0
 MajorVer=0
 MinorVer=1
-Release=23
+Release=25
 Build=0
 Debug=0
 PreRelease=0
-Special=0
+Special=1
 Private=0
 DLL=0
 Locale=2057
@@ -75,7 +75,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=
 FileDescription=
-FileVersion=0.1.23.0
+FileVersion=0.1.25.0
 InternalName=
 LegalCopyright=
 LegalTrademarks=
@@ -83,6 +83,7 @@ OriginalFilename=
 ProductName=
 ProductVersion=1.0.0.0
 Comments=
+SpecialBuild=
 
 [Excluded Packages]
 c:\program files (x86)\borland\cbuilder6\Bin\dclite60.bpl=Borland Integrated Translation Environment

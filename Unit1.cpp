@@ -654,8 +654,8 @@ void __fastcall TForm1::disconnect()
 
 	if (m_serial.port.connected)
 	{
-		m_serial.port.rts = true;
-		m_serial.port.dtr = true;
+		m_serial.port.rts = false;
+		m_serial.port.dtr = false;
 
 		m_serial.port.Disconnect();
 
@@ -668,8 +668,8 @@ void __fastcall TForm1::disconnect()
 
 	m_serial.rx_buffer_wr = 0;
 
-	SerialPortComboBox->Enabled  = true;
-	SerialSpeedComboBox->Enabled = true;
+	SerialPortComboBox->Enabled  = false;
+	SerialSpeedComboBox->Enabled = false;
 }
 
 bool __fastcall TForm1::connect(const bool clear_memo)
@@ -704,8 +704,8 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 		return false;
 	}
 
-	m_serial.port.rts      = true;
-	m_serial.port.dtr      = true;
+	m_serial.port.rts      = false;
+	m_serial.port.dtr      = false;
 	m_serial.port.byteSize = 8;
 	m_serial.port.parity   = NOPARITY;
 	m_serial.port.stopBits = ONESTOPBIT;
@@ -1805,30 +1805,81 @@ int __fastcall TForm1::k5_wait_flash_message()
 		// 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		// 00 00 00 20                                       ...
 
-		if (rx_data_size < 36 || rx_data[0] != 0x18 || rx_data[1] != 0x05)
+		// or ..
+
+		// 18 05 00 00 01 02 02 02 0E 53 50 4A 37 47 FF 01 90 00 8A 00     .........SPJ7G......
+
+		#if 0
+		{
+//			uint8_t data[] = {
+//				0x0E,0x69,0x14,0xE6,0x2F,0x93,0x0F,0x42,0x2F,0x66,0x85,0x0A,0x24,0x44,0x16,0x81,0x86,0x6C,0x9E,0xE6
+//			};
+			uint8_t data[] = {
+				0x0C,0x69,0x1C,0xE6,0xD8,0x5A,0x0A,0x51,0x21,0x35,0xD5,0x40
+			};
+
+
+			// de-obfuscate (de-scramble) the payload (the data and 16-bit CRC are the scrambled bytes)
+			k5_xor_payload(&data[0], ARRAY_SIZE(data));
+
+			String s;
+			for (unsigned int i = 0; i < ARRAY_SIZE(data); i++)
+			{
+				String s2;
+				s2.printf("%02X ", data[i]);
+				s += s2;
+			}
+			s += "    ";
+			for (unsigned int i = 0; i < ARRAY_SIZE(data); i++)
+			{
+				const char c = data[i];
+				if (c < 32)
+					s += '.';
+				else
+					s += String(c);
+			}
+			Memo1->Lines->Add("TEST: " + s);
+		}
+		#endif
+
+
+
+
+
+
+
+		if ((rx_data_size != 20 && rx_data_size != 36) || rx_data[0] != 0x18 || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
 		}
 
-		char buf[17];
-		memset(buf, 0, sizeof(buf));
-
-		for (int i = 0; i < ((int)sizeof(buf) - 1); i++)
+		if (rx_data_size >= 36)
 		{
-			const int k = i + 20;
-			if (k >= rx_data_size)
-				break;
-			const char c = rx_data[k];
-			if (!isprint(c))
-				break;
-			buf[i] = c;
+			char buf[17];
+			memset(buf, 0, sizeof(buf));
+
+			for (int i = 0; i < ((int)sizeof(buf) - 1); i++)
+			{
+				const int k = i + 20;
+				if (k >= rx_data_size)
+					break;
+				const char c = rx_data[k];
+				if (!isprint(c))
+					break;
+				buf[i] = c;
+			}
+
+			m_bootloader_ver = String(buf);
+
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("Bootloader version '" + m_bootloader_ver + "'");
 		}
-
-		m_bootloader_ver = String(buf);
-
-		Memo1->Lines->Add("");
-		Memo1->Lines->Add("Bootloader version '" + m_bootloader_ver + "'");
+		else
+		{
+			Memo1->Lines->Add("");
+			Memo1->Lines->Add("Bootloader version unknown (short packet rx'ed)");
+		}
 
 		clearRxPacket0();		// remove spent packet
 
@@ -1896,7 +1947,12 @@ int __fastcall TForm1::k5_send_flash_version_message(const char *ver)
 		// 8c 00 53 00 32 2e 30 30 2e 30 36 00 34 0a 00 00   ..S.2.00.06.4...
 		// 00 00 00 20                                       ...
 
-		if (rx_data_size < 36 || rx_data[0] != 0x18 || rx_data[1] != 0x05)
+		// or ..
+
+		// 18 05 00 00 01 02 02 02 0E 53 50 4A 37 47 FF 01 90 00 8A 00     .........SPJ7G......
+
+//		if (rx_data_size < 36 || rx_data[0] != 0x18 || rx_data[1] != 0x05)
+		if ((rx_data_size != 20 && rx_data_size != 36) || rx_data[0] != 0x18 || rx_data[1] != 0x05)
 		{
 			clearRxPacket0();		// remove spent packet
 			continue;
@@ -2022,11 +2078,11 @@ int __fastcall TForm1::k5_write_flash(const uint8_t *buf, const int len, const i
 		// 1A 05 08 00 00 00 00 00 00 00 01 00
 		// 1A 05 08 00 00 00 00 00 00 00 01 00
 
-		if (rx_data_size < 12 ||
+		if (rx_data_size < 12  ||
 			 rx_data[0] != 0x1A ||
 			 rx_data[1] != 0x05 ||
-			 rx_data[2] != 8 ||
-			 rx_data[3] != 0x00 ||
+			 rx_data[2] != 8    ||
+			 rx_data[3] != 0    ||
 			 rx_data[4] != buffer[4] ||
 			 rx_data[5] != buffer[5] ||
 			 rx_data[6] != buffer[6] ||
