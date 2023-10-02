@@ -2592,8 +2592,9 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	Memo1->Clear();
 	Memo1->Lines->Add("");
 
-	s.printf("Loaded %u (0x%04X) bytes (max 0x%04X) from '%s'", m_loadfile_data.size(), m_loadfile_data.size(), UVK5_FLASH_SIZE, m_loadfile_name.c_str());
+	s.printf("Loaded %u (0x%04X) bytes (max 0x%04X) from ..", m_loadfile_data.size(), m_loadfile_data.size(), UVK5_FLASH_SIZE);
 	Memo1->Lines->Add(s);
+	Memo1->Lines->Add(m_loadfile_name);
 	Memo1->Update();
 
 	if (m_loadfile_data.size() < 1000)
@@ -2905,8 +2906,9 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 	Memo1->Clear();
 	Memo1->Lines->Add("");
 
-	s.printf("Loaded %u bytes from '%s'", m_loadfile_data.size(), m_loadfile_name.c_str());
+	s.printf("Loaded %u bytes from ..", m_loadfile_data.size());
 	Memo1->Lines->Add(s);
+	Memo1->Lines->Add(m_loadfile_name);
 	Memo1->Update();
 
 	if (m_loadfile_data.size() <= 1000)
