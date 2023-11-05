@@ -1,322 +1,67 @@
 
-/*
- * Use at your own risk
- *
- *
- * This program is licensed under the GNU GENERAL PUBLIC LICENSE v3
- * License text avaliable at: http://www.gnu.org/copyleft/gpl.html 
- */
-
-/*
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
-
-#ifdef _MSC_VER
-	#include "StdAfx.h"
-#endif
-
-#include <string.h>
-#include <stdio.h>
-
 #ifdef __BORLANDC__
+	#include <string.h>
 	#pragma hdrstop
-#endif
-
-#ifdef _DEBUG
-	#ifdef _MSC_VER
-		#define new DEBUG_NEW
-		#undef THIS_FILE
-		static char THIS_FILE[] = __FILE__;
-	#endif
-#endif
-
-#include "SerialPort.h"
-
-#ifdef __BORLANDC__
+	#include "SerialPort.h"
 	#pragma package(smart_init)
+#else
+	#ifdef _MSC_VER
+		#include "StdAfx.h"
+	#endif
+	#include <string.h>
+	#include "SerialPort.h"
 #endif
-
-#include <stdint.h>
 
 // ***********************************************************
 
-void __fastcall GetLastErrorStr(DWORD err, char *err_str, int max_size)
-{
-	if (!err_str || max_size <= 0)
-		return;
-
-	memset(err_str, 0, max_size);
-
-	char *buf = NULL;
-
-	WORD prevErrorMode = ::SetErrorMode(SEM_FAILCRITICALERRORS);	// ignore critical errors
-
-	HMODULE wnet_handle = ::GetModuleHandle(_T("wininet.dll"));
-
-	DWORD flags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_FROM_SYSTEM;
-	if (wnet_handle) flags |= FORMAT_MESSAGE_FROM_HMODULE;		// retrieve message from specified DLL
-
-	DWORD res = ::FormatMessageA(flags, wnet_handle, err, 0, (LPSTR)&buf, 0, NULL);
-
-	if (wnet_handle)
-		::FreeLibrary(wnet_handle);
-
-	if (buf != NULL)
+#ifdef __BORLANDC__
+	char * strcpy_s(char *d, int max, char *s)
 	{
-		#if (__BORLANDC__ < 0x0600)
-			if (res > 0)
-				sprintf(err_str, "[%d] %s", err, buf);
-		#else
-			if (res > 0)
-				sprintf_s(err_str, max_size, "[%d] %s", err, buf);
-		#endif
-
-		::LocalFree(buf);
+		return strcpy(d, s);
 	}
-
-	::SetErrorMode(prevErrorMode);
-}
+#endif
 
 // ********************************************
 
 CSerialPort::CSerialPort()
 {
-	m_device_handle = INVALID_HANDLE_VALUE;
-	m_mutex         = ::CreateMutex(NULL, TRUE, NULL);
-	m_thread        = NULL;
-
-	m_last_error = ERROR_SUCCESS;
-	memset(m_last_error_str, 0, sizeof(m_last_error_str));
-
-	memset(&m_rx.overlapped, 0, sizeof(OVERLAPPED));
-	memset(&m_tx.overlapped, 0, sizeof(OVERLAPPED));
-	m_rx.overlapped.hEvent  = INVALID_HANDLE_VALUE;
-	m_tx.overlapped.hEvent  = INVALID_HANDLE_VALUE;
-	m_rx.overlapped_waiting = false;
-	m_tx.overlapped_waiting = false;
-
-	GetSerialPortList();
-
-	memset(&m_dcb, 0, sizeof(m_dcb));
-	m_dcb.DCBlength     = sizeof(m_dcb);
-	m_dcb.BaudRate      = 115200;
-	m_dcb.fBinary       = true;
-	m_dcb.fParity       = false;
-	m_dcb.fOutxCtsFlow  = false;
-	m_dcb.fOutxDsrFlow  = false;
-	m_dcb.fDtrControl   = DTR_CONTROL_ENABLE;	// DTR_CONTROL_DISABLE, DTR_CONTROL_ENABLE, DTR_CONTROL_HANDSHAKE
-//	m_dcb.fDsrSensitivity:1;   // DSR sensitivity
-//	m_dcb.fTXContinueOnXoff:1; // XOFF continues Tx
-	m_dcb.fOutX         = false;
-	m_dcb.fInX          = false;
-//	m_dcb.fErrorChar: 1;       // enable error replacement
-	m_dcb.fNull         = false;
-	m_dcb.fRtsControl   = RTS_CONTROL_ENABLE;	// RTS_CONTROL_DISABLE, RTS_CONTROL_ENABLE, RTS_CONTROL_HANDSHAKE
-	m_dcb.fAbortOnError = false;
-//	m_dcb.fDummy2:17;          // reserved
-//	m_dcb.XonLim;
-//	m_dcb.XoffLim;
-	m_dcb.ByteSize      = 8;	// 8 bits per byte - when was it ever any different ??????
-	m_dcb.Parity        = NOPARITY;
-	m_dcb.StopBits      = ONESTOPBIT;
-//	m_dcb.XonChar;
-//	m_dcb.XoffChar;
-//	m_dcb.ErrorChar;
-//	m_dcb.EofChar;
-//	m_dcb.EvtChar;
-
-	memset(&m_timeouts, 0, sizeof(m_timeouts));
-	m_timeouts.ReadIntervalTimeout           = MAXDWORD;
-	m_timeouts.ReadTotalTimeoutMultiplier    = 0;
-	m_timeouts.ReadTotalTimeoutConstant      = 0;
-	m_timeouts.WriteTotalTimeoutMultiplier   = 0;
-	m_timeouts.WriteTotalTimeoutConstant     = 0;
-
-	m_rx.queue_size = 32768;
-	m_tx.queue_size = 32768;
-
-	m_buffer.resize(m_rx.queue_size);
-
-	m_rx.buffer.resize(1000000);
-	m_rx.buffer_rd = 0;
-	m_rx.buffer_wr = 0;
-
-	m_tx.buffer.resize(1000000);
-	m_tx.buffer_rd = 0;
-	m_tx.buffer_wr = 0;
-
-	m_rx.overlapped_waiting = false;
-	m_tx.overlapped_waiting = false;
-
-/*
-	#ifdef USE_THREAD
-		m_thread = new CSerialPortThread(&threadProcess);
-	#else
-		m_thread = NULL;
-	#endif
-*/
+	Init();
 }
 
 CSerialPort::~CSerialPort()
 {
-	if (m_thread != NULL)
-	{
-		if (!m_thread->FreeOnTerminate)
-		{
-			m_thread->Terminate();
-			m_thread->WaitFor();
-			delete m_thread;
-		}
-		else
-			m_thread->Terminate();
-		m_thread = NULL;
-	}
-
 	Disconnect();
-
-	if (m_mutex != NULL)
-		::CloseHandle(m_mutex);
-	m_mutex = NULL;
 }
 
-void __fastcall CSerialPort::clearErrors()
-{
-	#ifdef USE_THREAD
-		const DWORD res = ::WaitForSingleObject(m_mutex, 100);
-	#endif
-
-	m_errors.resize(0);
-
-	#ifdef USE_THREAD
-		if (res == WAIT_OBJECT_0)
-			::ReleaseMutex(m_mutex);
-	#endif
-}
-
-void __fastcall CSerialPort::pushError(const DWORD error, STRING leading_text)
-{
-	#ifdef USE_THREAD
-		const DWORD res = ::WaitForSingleObject(m_mutex, 10);
-	#endif
-
-	m_last_error = error;
-	GetLastErrorStr(error, m_last_error_str, sizeof(m_last_error_str));
-	m_errors.push_back(leading_text + STRING(m_last_error_str));
-
-	#ifdef USE_THREAD
-		if (res == WAIT_OBJECT_0)
-			::ReleaseMutex(m_mutex);
-	#endif
-}
-
-unsigned int __fastcall CSerialPort::errorCount()
-{
-	#ifdef USE_THREAD
-		const DWORD res = ::WaitForSingleObject(m_mutex, 10);
-	#endif
-
-	const unsigned int size = m_errors.size();
-
-	#ifdef USE_THREAD
-		if (res == WAIT_OBJECT_0)
-			::ReleaseMutex(m_mutex);
-	#endif
-
-	return size;
-}
-
-STRING __fastcall CSerialPort::pullError()
-{
-	STRING s;
-
-	#ifdef USE_THREAD
-		const DWORD res = ::WaitForSingleObject(m_mutex, 100);
-	#endif
-
-	if (!m_errors.empty())
-	{
-		s = m_errors[0];
-		m_errors.erase(m_errors.begin() + 0);
-	}
-
-	#ifdef USE_THREAD
-		if (res == WAIT_OBJECT_0)
-			::ReleaseMutex(m_mutex);
-	#endif
-
-	return s;
-}
-
-void __fastcall CSerialPort::getState()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return;
-
-	if (::GetCommModemStatus(m_device_handle, &m_modem_state_read) == FALSE)
-		pushError(::GetLastError(), "GetCommModemStatus ");
-
-	if (::GetCommState(m_device_handle, &m_dcb) == FALSE)
-		pushError(::GetLastError(), "GetCommState ");
-
-	if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-		pushError(::GetLastError(), "ClearCommError ");
-	else
-	{
-		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
-	}
-}
-
-void __fastcall CSerialPort::GetSerialPortList()
+void CSerialPort::GetSerialPortList()
 {  // enumerate the com-ports - non-WMI
 	#define MAX_KEY_LENGTH 255
 	#define MAX_VALUE_NAME 16383
 
-	DWORD err;
-
 	m_serialPortList.clear();
 
 	HKEY hKey = NULL;
-
-	err = ::RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_QUERY_VALUE, &hKey);
-	if (err != ERROR_SUCCESS || hKey == NULL)
+	LONG res = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_QUERY_VALUE, &hKey);
+	if (res == ERROR_SUCCESS && hKey != NULL)
 	{
-		pushError(err, "reg ");
-		if (hKey != NULL)
-			::RegCloseKey(hKey);
-		return;
-	}
+//		TCHAR    achKey[MAX_KEY_LENGTH];   // buffer for subkey name
+//		DWORD    cbName;                   // size of name string
+		TCHAR    achClass[MAX_PATH] = TEXT("");  // buffer for class name
+		DWORD    cchClassName = MAX_PATH;  // size of class string
+		DWORD    cSubKeys=0;               // number of subkeys
+		DWORD    cbMaxSubKey;              // longest subkey size
+		DWORD    cchMaxClass;              // longest class string
+		DWORD    cValues;					// number of values for key
+		DWORD    cchMaxValue;          // longest value name
+		DWORD    cbMaxValueData;       // longest value data
+		DWORD    cbSecurityDescriptor; // size of security descriptor
+		FILETIME ftLastWriteTime;      // last write time
 
-//	TCHAR    achKey[MAX_KEY_LENGTH];		// buffer for subkey name
-//	DWORD    cbName;							// size of name string
-	char     achClass[MAX_PATH];			// buffer for class name
-	DWORD    cchClassName = MAX_PATH;	// size of class string
-	DWORD    cSubKeys = 0;					// number of subkeys
-	DWORD    cbMaxSubKey;					// longest subkey size
-	DWORD    cchMaxClass;					// longest class string
-	DWORD    cValues;							// number of values for key
-	DWORD    cchMaxValue;					// longest value name
-	DWORD    cbMaxValueData;				// longest value data
-	DWORD    cbSecurityDescriptor;		// size of security descriptor
-	FILETIME ftLastWriteTime;				// last write time
+		TCHAR achValue[MAX_VALUE_NAME];
+		DWORD cchValue = MAX_VALUE_NAME;
 
-	char achValue[MAX_VALUE_NAME];
-	DWORD cchValue = MAX_VALUE_NAME;
-
-	// get the class name and the value count
-	err = ::RegQueryInfoKeyA(
+		// Get the class name and the value count.
+		res = RegQueryInfoKey(
 				hKey,                    // key handle
 				achClass,                // buffer for class name
 				&cchClassName,           // size of class string
@@ -329,914 +74,966 @@ void __fastcall CSerialPort::GetSerialPortList()
 				&cbMaxValueData,         // longest value data
 				&cbSecurityDescriptor,   // security descriptor
 				&ftLastWriteTime);       // last write time
-	if (err != ERROR_SUCCESS)
-	{
-		pushError(err, "reg ");
-		::RegCloseKey(hKey);
-		return;
-	}
 
-	if (cValues <= 0)
-	{	// no serial ports
-		::RegCloseKey(hKey);
-		return;
-	}
-
-	for (int i = 0; i < (int)cValues; i++)
-	{
-		cchValue = MAX_VALUE_NAME;
-		achValue[0] = '\0';
-
-		err = ::RegEnumValueA(hKey, i, achValue, &cchValue, NULL, NULL, NULL, NULL);
-		if (err != ERROR_SUCCESS)
+		if (res == ERROR_SUCCESS)
 		{
-			pushError(err, "reg ");
-			break;
-//			continue;
-		}
+			if (cValues > 0)
+			{
+				//printf( "\nNumber of values: %d\n", cValues);
+				for (int i = 0, retCode = ERROR_SUCCESS; i < (int)cValues; i++)
+				{
+					cchValue = MAX_VALUE_NAME;
+					achValue[0] = '\0';
+					retCode = RegEnumValue(hKey, i, achValue, &cchValue, NULL, NULL, NULL, NULL);
+					if (retCode == ERROR_SUCCESS)
+					{
+						DWORD type;
+						char str[MAX_PATH];
+						DWORD size = sizeof(str);
 
-		DWORD type;
-		char str[MAX_PATH];
-		DWORD size = sizeof(str);
-
-		err = ::RegQueryValueExA(hKey, achValue, NULL, &type, (BYTE *)str, &size);
-		if (err != ERROR_SUCCESS)
-		{
-			pushError(err, "reg ");
-			break;
-//			continue;
-		}
-
-		// check to see if we already have it
-		unsigned int k = 0;
-		while (k < m_serialPortList.size())
-		{
-			if (STRING(m_serialPortList[k].name).LowerCase() == STRING(str).LowerCase())
-				break;	// already in the list
-			k++;
-		}
-
-		if (k >= m_serialPortList.size())
-		{	// save it into our list
-			T_SerialPortInfo serialPortInfo;
-			memset(&serialPortInfo, 0, sizeof(T_SerialPortInfo));
-			#if (__BORLANDC__ < 0x0600)
-				strcpy(serialPortInfo.name, str);
-				strcpy(serialPortInfo.deviceID, achValue);
-			#else
-				strcpy_s(serialPortInfo.name, sizeof(serialPortInfo.name), str);
-				strcpy_s(serialPortInfo.deviceID, sizeof(serialPortInfo.deviceID), achValue);
-			#endif
-			m_serialPortList.push_back(serialPortInfo);
+						retCode = RegQueryValueEx(hKey, achValue, NULL, &type, (BYTE *)str, &size);
+						if (retCode == ERROR_SUCCESS)
+						{
+							T_SerialPortInfo serialPortInfo;
+							strcpy_s(serialPortInfo.name, sizeof(serialPortInfo.name), str);
+							strcpy_s(serialPortInfo.deviceID, sizeof(serialPortInfo.deviceID), achValue);
+							m_serialPortList.push_back(serialPortInfo);
+						}
+					}
+				}
+			}
 		}
 	}
 
-	::RegCloseKey(hKey);
+	if (hKey != NULL)
+		RegCloseKey(hKey);
 }
 
-void __fastcall CSerialPort::GetSerialPortList(std::vector <T_SerialPortInfo> &serialPortList)
+bool CSerialPort::isSerialPortPresent(char *name)
+{  // enumerate the com-ports - non-WMI
+	#define MAX_KEY_LENGTH 255
+	#define MAX_VALUE_NAME 16383
+
+	bool present = false;
+
+	if (name == NULL)
+		return false;
+
+	HKEY hKey = NULL;
+	LONG res = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_QUERY_VALUE, &hKey);
+	if (res == ERROR_SUCCESS && hKey != NULL)
+	{
+//		TCHAR    achKey[MAX_KEY_LENGTH];   // buffer for subkey name
+//		DWORD    cbName;                   // size of name string
+		TCHAR    achClass[MAX_PATH] = TEXT("");  // buffer for class name
+		DWORD    cchClassName = MAX_PATH;  // size of class string
+		DWORD    cSubKeys=0;               // number of subkeys
+		DWORD    cbMaxSubKey;              // longest subkey size
+		DWORD    cchMaxClass;              // longest class string
+		DWORD    cValues;					// number of values for key
+		DWORD    cchMaxValue;          // longest value name
+		DWORD    cbMaxValueData;       // longest value data
+		DWORD    cbSecurityDescriptor; // size of security descriptor
+		FILETIME ftLastWriteTime;      // last write time
+
+		TCHAR achValue[MAX_VALUE_NAME];
+		DWORD cchValue = MAX_VALUE_NAME;
+
+		// Get the class name and the value count.
+		res = RegQueryInfoKey(
+				hKey,                    // key handle
+				achClass,                // buffer for class name
+				&cchClassName,           // size of class string
+				NULL,                    // reserved
+				&cSubKeys,               // number of subkeys
+				&cbMaxSubKey,            // longest subkey size
+				&cchMaxClass,            // longest class string
+				&cValues,                // number of values for this key
+				&cchMaxValue,            // longest value name
+				&cbMaxValueData,         // longest value data
+				&cbSecurityDescriptor,   // security descriptor
+				&ftLastWriteTime);       // last write time
+
+		if (res == ERROR_SUCCESS)
+		{
+			if (cValues > 0)
+			{
+				//printf( "\nNumber of values: %d\n", cValues);
+				for (int i = 0, retCode = ERROR_SUCCESS; i < (int)cValues; i++)
+				{
+					cchValue = MAX_VALUE_NAME;
+					achValue[0] = '\0';
+					retCode = RegEnumValue(hKey, i, achValue, &cchValue, NULL, NULL, NULL, NULL);
+					if (retCode == ERROR_SUCCESS)
+					{
+						DWORD type;
+						char str[MAX_PATH];
+						DWORD size = sizeof(str);
+
+						retCode = RegQueryValueEx(hKey, achValue, NULL, &type, (BYTE *)str, &size);
+						if (retCode == ERROR_SUCCESS)
+						{
+							if (strcmp(str, name) == 0)
+							{
+								present = true;
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (hKey != NULL)
+		RegCloseKey(hKey);
+
+	return present;
+}
+
+void CSerialPort::GetSerialPortList(std::vector<T_SerialPortInfo> &serialPortList)
 {
 	GetSerialPortList();
 
 	serialPortList.clear();
-
 	for (int i = 0; i < (int)m_serialPortList.size(); i++)
 		serialPortList.push_back(m_serialPortList[i]);
 }
 
-bool __fastcall CSerialPort::Connected()
+void CSerialPort::Init()
 {
-	if (m_device_handle == INVALID_HANDLE_VALUE)
+	LastError = 0;
+//	LastErrorStr[0] = 0;
+
+	memset(&overlapped_Read, 0, sizeof(OVERLAPPED));
+	memset(&overlapped_Write, 0, sizeof(OVERLAPPED));
+
+	device_name[0] = 0;
+	device_handle = INVALID_HANDLE_VALUE;
+
+	GetSerialPortList();
+
+	memset(&MyDCB, 0, sizeof(DCB));
+	MyDCB.DCBlength = sizeof(DCB);
+	MyDCB.BaudRate = 115200;
+	MyDCB.fBinary = true;
+	MyDCB.fParity = false;
+	MyDCB.fOutxCtsFlow = false;
+	MyDCB.fOutxDsrFlow = false;
+	MyDCB.fDtrControl = DTR_CONTROL_DISABLE;	// DTR_CONTROL_DISABLE, DTR_CONTROL_ENABLE, DTR_CONTROL_HANDSHAKE
+//	MyDCB.fDsrSensitivity:1;   // DSR sensitivity
+//	MyDCB.fTXContinueOnXoff:1; // XOFF continues Tx
+	MyDCB.fOutX = false;
+	MyDCB.fInX = false;
+//	MyDCB.fErrorChar: 1;       // enable error replacement
+	MyDCB.fNull = false;
+	MyDCB.fRtsControl = RTS_CONTROL_DISABLE;	// RTS_CONTROL_DISABLE, RTS_CONTROL_ENABLE, RTS_CONTROL_HANDSHAKE
+	MyDCB.fAbortOnError = false;
+//	MyDCB.fDummy2:17;          // reserved
+//	MyDCB.XonLim;               // transmit XON thrhold
+//	MyDCB.XoffLim;              // transmit XOFF thrhold
+	MyDCB.ByteSize = 8;				// 8 bits per byte - when was it ever any different ??????
+	MyDCB.Parity = NOPARITY;
+	MyDCB.StopBits = ONESTOPBIT;
+//	MyDCB.XonChar;              // Tx and Rx XON character
+//	MyDCB.XoffChar;             // Tx and Rx XOFF character
+//	MyDCB.ErrorChar;            // error replacement character
+//	MyDCB.EofChar;              // end of input character
+//	MyDCB.EvtChar;              // received event character
+
+	memset(&MyTimeouts, 0, sizeof(COMMTIMEOUTS));
+	MyTimeouts.ReadIntervalTimeout = MAXDWORD;
+	MyTimeouts.ReadTotalTimeoutMultiplier = 0;
+	MyTimeouts.ReadTotalTimeoutConstant = 0;
+	MyTimeouts.WriteTotalTimeoutMultiplier = 0;
+	MyTimeouts.WriteTotalTimeoutConstant = 0;
+
+	ReceiveQueue  = 32768;
+	TransmitQueue = 32768;
+
+	MaxFails = 3;
+}
+
+bool CSerialPort::GetCommStat(DCB *dcb)
+{
+	if (device_handle == INVALID_HANDLE_VALUE)
 		return false;
 
-	if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-	{	// close the comm port
-
-		const DWORD err = ::GetLastError();
-		if (err != ERROR_INVALID_FUNCTION)
-		{
-//			char err_str[256];
-//			GetLastErrorStr(err, err_str, sizeof(err_str));
-
-			pushError(err, "connected ClearCommError ");
-
-//			if (err == ERROR_ACCESS_DENIED)
-//			{	// tends to mean they have unplugged the USB serial port, or we're no longer connected
-//			}
-
-			Disconnect();
-		}
-	}
-	else
+	if (!GetCommState(device_handle, dcb))
 	{
-		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		return false;
 	}
 
-	return (m_device_handle != INVALID_HANDLE_VALUE) ? true : false;
+	return true;
 }
 
-int __fastcall CSerialPort::Connect(STRING device_name, const bool use_overlapped)
+bool CSerialPort::Connected()
 {
-	if (m_device_handle != INVALID_HANDLE_VALUE)
-		Disconnect();
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return false;
 
-	clearErrors();
 
-	memset(&m_rx.overlapped, 0, sizeof(m_rx.overlapped));
-	memset(&m_tx.overlapped, 0, sizeof(m_tx.overlapped));
-	m_rx.overlapped.hEvent  = INVALID_HANDLE_VALUE;
-	m_tx.overlapped.hEvent  = INVALID_HANDLE_VALUE;
-	m_rx.overlapped_waiting = false;
-	m_tx.overlapped_waiting = false;
 
-	m_rx.buffer_rd = 0;
-	m_rx.buffer_wr = 0;
+	// we need to be able to detect when a USB comport is no longer plugged in or working
 
-	m_tx.buffer_rd = 0;
-	m_tx.buffer_wr = 0;
 
-	m_rx_break = false;
 
-	if (device_name.IsEmpty())
-		return -1;
+	return true;
+}
 
-	m_device_name = device_name;
+bool CSerialPort::Connect(char *NewDeviceName)
+{
+	DCB dcb;
+	COMMTIMEOUTS timeouts;
 
-	#if defined(__BORLANDC__)
-		STRING name = (device_name.Pos("\\\\") != 1) ? STRING("\\\\.\\") + device_name : device_name;
-	#elif defined(_MSC_VER)
-		// this needs fixing for MS Visual Studio
-		STRING name = (device_name.Pos("\\\\") != 0) ? STRING("\\\\.\\") + device_name : device_name;
-	#endif
+	// just incase we are already connected
+	Disconnect();
 
-	#if defined(__BORLANDC__)
-		#ifdef SERIAL_OVERLAPPED
-			if (use_overlapped)
-				m_device_handle = ::CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0 | FILE_FLAG_OVERLAPPED, NULL);
-			else
-				m_device_handle = ::CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-		#else
-			m_device_handle = ::CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-		#endif
-	#elif defined(_MSC_VER)
-		#ifdef SERIAL_OVERLAPPED
-			if (use_overlapped)
-				m_device_handle = ::CreateFileA(name.GetString(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0 | FILE_FLAG_OVERLAPPED, NULL);
-			else
-				m_device_handle = ::CreateFileA(name.GetString(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-		#else
-			m_device_handle = ::CreateFileA(name.GetString(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-		#endif
+	if (NewDeviceName == NULL)
+		return false;
+
+	strcpy_s(device_name, sizeof(device_name), NewDeviceName);
+
+	char dn[MAX_PATH];
+	strcpy_s(dn, sizeof(dn), "\\\\.\\");
+	strcpy_s(dn + strlen(dn), sizeof(dn) - strlen(dn), device_name);
+
+	// Open device
+	#ifdef SERIAL_OVERLAPPED
+		device_handle = CreateFileA(dn, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
 	#else
-		#error "FIX ME"
+		device_handle = CreateFileA(dn, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	#endif
-
-	if (m_device_handle == INVALID_HANDLE_VALUE)
+	if (device_handle == INVALID_HANDLE_VALUE)
 	{
-		pushError(::GetLastError(), "connect CreateFile ");
-		return m_last_error;
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		return false;
 	}
 
-	if (::GetCommState(m_device_handle, &m_original_dcb) == FALSE)
-		pushError(::GetLastError(), "connect GetCommState ");
+	// save the current port parameters
+	if (!GetCommState(device_handle, &OriginalDCB))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
 
-	if (::GetCommTimeouts(m_device_handle, &m_original_timeouts) == FALSE)
-		pushError(::GetLastError(), "connect GetCommTimeouts ");
+		CloseHandle(device_handle);
+		device_handle = INVALID_HANDLE_VALUE;
+		return false;
+	}
+	if (!GetCommTimeouts(device_handle, &OriginalTimeouts))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
 
-	if (::GetCommModemStatus(m_device_handle, &m_modem_state_read) == FALSE)
-		pushError(::GetLastError(), "connect GetCommModemStatus ");
+		CloseHandle(device_handle);
+		device_handle = INVALID_HANDLE_VALUE;
+		return false;
+	}
 
-	#if 1
-		::SetCommState(m_device_handle, &m_dcb);
-	#else
-		if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
-			pushError(::GetLastError(), "connect SetCommState ");
-	#endif
+	// modify the ports parameters
+	memcpy(&dcb, &OriginalDCB, sizeof(DCB));
+	dcb.DCBlength = MyDCB.DCBlength;
+	dcb.BaudRate = MyDCB.BaudRate;
+	dcb.fBinary = MyDCB.fBinary;
+	dcb.fParity = MyDCB.fParity;
+//	dcb.fOutxCtsFlow = MyDCB.fOutxCtsFlow;
+//	dcb.fOutxDsrFlow = MyDCB.fOutxDsrFlow;
+	dcb.fOutxCtsFlow = 0;
+	dcb.fOutxDsrFlow = 0;
+	dcb.fDtrControl = MyDCB.fDtrControl;
+	dcb.fOutX = MyDCB.fOutX;
+	dcb.fInX = MyDCB.fInX;
+	dcb.fNull = MyDCB.fNull;
+	dcb.fRtsControl = MyDCB.fRtsControl;
+	dcb.fAbortOnError = MyDCB.fAbortOnError;
+	dcb.ByteSize = MyDCB.ByteSize;
+	dcb.Parity = MyDCB.Parity;
+	dcb.StopBits = MyDCB.StopBits;
+	if (!SetCommState(device_handle, &dcb))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
 
-	if (::SetCommTimeouts(m_device_handle, &m_timeouts) == FALSE)
-		pushError(::GetLastError(), "connect SetCommTimeouts ");
+		CloseHandle(device_handle);
+		device_handle = INVALID_HANDLE_VALUE;
+		return false;
+	}
 
-	if (::SetupComm(m_device_handle, m_rx.queue_size, m_tx.queue_size) == FALSE)
-		pushError(::GetLastError(), "connect SetupComm ");
+	memcpy(&timeouts, &OriginalTimeouts, sizeof(COMMTIMEOUTS));
+	timeouts.ReadIntervalTimeout = MyTimeouts.ReadIntervalTimeout;
+	timeouts.ReadTotalTimeoutMultiplier = MyTimeouts.ReadTotalTimeoutMultiplier;
+	timeouts.ReadTotalTimeoutConstant = MyTimeouts.ReadTotalTimeoutConstant;
+	timeouts.WriteTotalTimeoutMultiplier = MyTimeouts.WriteTotalTimeoutMultiplier;
+	timeouts.WriteTotalTimeoutConstant = MyTimeouts.WriteTotalTimeoutConstant;
+	if (!SetCommTimeouts(device_handle, &timeouts))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+
+		Disconnect();
+		return false;
+	}
+
+	if (!SetupComm(device_handle, 1024 * ReceiveQueue, 1024 * TransmitQueue))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+
+		Disconnect();
+		return false;
+	}
+
+	if (!SetupComm(device_handle, 1024 * ReceiveQueue, 1024 * TransmitQueue))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+
+		Disconnect();
+		return false;
+	}
 
 	#ifdef SERIAL_OVERLAPPED
-		if (use_overlapped)
+		overlapped_Read.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+		overlapped_Write.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+		if (overlapped_Read.hEvent == NULL || overlapped_Write.hEvent == NULL)
 		{
-			m_rx.overlapped.hEvent = ::CreateEvent(NULL, TRUE, FALSE, NULL);
-			if (m_rx.overlapped.hEvent == NULL)
-				pushError(::GetLastError(), "connect CreateEvent ");
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
 
-			m_tx.overlapped.hEvent = ::CreateEvent(NULL, TRUE, FALSE, NULL);
-			if (m_tx.overlapped.hEvent == NULL)
-				pushError(::GetLastError(), "connect CreateEvent ");
-
-/*			//if (::SetCommMask(m_device_handle, EV_TXEMPTY | EV_RXCHAR) == FALSE)
-			if (::SetCommMask(m_device_handle, EV_RXCHAR | EV_BREAK) == FALSE)
-				pushError(::GetLastError(), "connect SetCommMask ");
-*/
+			Disconnect();
+			return false;
 		}
 	#endif
 
-	// flush the Tx/Rx buffers
-	if (::PurgeComm(m_device_handle, PURGE_RXABORT | PURGE_TXABORT | PURGE_RXCLEAR | PURGE_TXCLEAR) == FALSE)
-		pushError(::GetLastError(), "connect PurgeComm ");
+	// return true if we are connected OK
+	return (device_handle != INVALID_HANDLE_VALUE) ? true : false;
+}
 
-	if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-		pushError(::GetLastError(), "connect ClearCommError ");
+void CSerialPort::Disconnect()
+{
+	if (overlapped_Read.hEvent != NULL)
+	{
+		CloseHandle(overlapped_Read.hEvent);
+		memset(&overlapped_Read, 0, sizeof(OVERLAPPED));
+	}
+
+	if (overlapped_Write.hEvent != NULL)
+	{
+		CloseHandle(overlapped_Write.hEvent);
+		memset(&overlapped_Write, 0, sizeof(OVERLAPPED));
+	}
+
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+		FlushFileBuffers(device_handle);
+
+		// back to original settings
+		SetCommState(device_handle, &OriginalDCB);
+		SetCommTimeouts(device_handle, &OriginalTimeouts);
+
+		CloseHandle(device_handle);
+		device_handle = INVALID_HANDLE_VALUE;
+	}
+}
+
+void CSerialPort::flushRx()
+{	// flush the receiver out
+	char buf[128];
+	DWORD num_of_bytes = 0;
+
+	if (overlapped_Read.hEvent != NULL)
+	{
+		while ((device_handle != INVALID_HANDLE_VALUE) && ReadFile(device_handle, buf, sizeof(buf), &num_of_bytes, &overlapped_Read) == TRUE)
+			if (num_of_bytes == 0)
+				break;
+	}
 	else
 	{
-		m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
+		while ((device_handle != INVALID_HANDLE_VALUE) && ReadFile(device_handle, buf, sizeof(buf), &num_of_bytes, NULL) == TRUE)
+			if (num_of_bytes == 0)
+				break;
 	}
-
-	#ifdef USE_THREAD
-		m_thread = new CSerialPortThread(&threadProcess);
-	#endif
-
-	return ERROR_SUCCESS;	// OK
 }
 
-void __fastcall CSerialPort::Disconnect()
+int CSerialPort::RxBytesAvailable()
+{	// return number of bytes waiting to be read
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return -1;	// not connected
+
+	COMSTAT TempStat;
+	DWORD TempDword;
+
+	const BOOL res = ClearCommError(device_handle, &TempDword, &TempStat);
+	if (res)
+		return (int)TempStat.cbInQue;	// OK
+
+	LastError = GetLastError();
+
+	return -2;
+}
+
+int CSerialPort::RxBytes(void *buf, int num_of_bytes)
 {
-	if (m_thread != NULL)
-	{
-		if (!m_thread->FreeOnTerminate)
-		{
-			m_thread->Terminate();
-			m_thread->WaitFor();
-			delete m_thread;
-		}
-		else
-			m_thread->Terminate();
-		m_thread = NULL;
-	}
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return -1;	// not connected
 
-	const HANDLE handle = m_device_handle;
-	m_device_handle = INVALID_HANDLE_VALUE;	// stops the thread accessing the serial port
+	DWORD ReadBytes = 0;
+	COMSTAT TempStat;
+	DWORD TempDword;
 
-	m_rx.buffer_rd = 0;
-	m_rx.buffer_wr = 0;
+	BOOL res = ClearCommError(device_handle, &TempDword, &TempStat);
+	if (res)
+		ReadBytes = TempStat.cbInQue;	// OK
 
-	m_tx.buffer_rd = 0;
-	m_tx.buffer_wr = 0;
+//	LastError = GetLastError();
 
-	if (m_rx.overlapped.hEvent != INVALID_HANDLE_VALUE)
-	{
-		::CloseHandle(m_rx.overlapped.hEvent);
-		memset(&m_rx.overlapped, 0, sizeof(m_rx.overlapped));
-		m_rx.overlapped.hEvent = INVALID_HANDLE_VALUE;
-	}
-
-	if (m_tx.overlapped.hEvent != INVALID_HANDLE_VALUE)
-	{
-		::CloseHandle(m_tx.overlapped.hEvent);
-		memset(&m_tx.overlapped, 0, sizeof(m_tx.overlapped));
-		m_tx.overlapped.hEvent = INVALID_HANDLE_VALUE;
-	}
-
-	if (handle != INVALID_HANDLE_VALUE)
-	{
-		::PurgeComm(handle, PURGE_RXABORT | PURGE_RXCLEAR);
-		::ClearCommError(handle, NULL, NULL);
-//		::SetCommState(handle, &m_original_dcb);
-		::SetCommTimeouts(handle, &m_original_timeouts);
-		::ClearCommError(handle, NULL, NULL);
-		::CloseHandle(handle);
-	}
-}
-
-void __fastcall CSerialPort::processTx()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return;
-
-	DWORD bytes_written = 0;
-
-	const int wr = m_tx.buffer_wr;
-	int rd       = m_tx.buffer_rd;
-	int len      = (wr >= rd) ? wr - rd : m_tx.buffer.size() - rd;
-
-	if (m_tx.overlapped.hEvent == INVALID_HANDLE_VALUE)
-	{	// non-overlapped
-
-		if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-		{
-			const DWORD err = ::GetLastError();
-			if (err != ERROR_INVALID_FUNCTION)
-				pushError(err, "tx ClearCommError ");
-		}
-		else
-		{
-			m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
-		}
-
-		if (len > 0)
-		{
-			if (::WriteFile(m_device_handle, &m_tx.buffer[rd], len, &bytes_written, NULL) == FALSE)
-			{
-				const DWORD err = ::GetLastError();
-				if (err != ERROR_INVALID_FUNCTION)
-				{
-					pushError(err, "tx WriteFile ");
-					//::ClearCommBreak(m_device_handle);
-					::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read);
-					return;
-				}
-			}
-		}
-	}
-	else
-	{	// overlapped
-
-		if (!m_tx.overlapped_waiting)
-		{
-			if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-			{
-				const DWORD err = ::GetLastError();
-				if (err != ERROR_INVALID_FUNCTION)
-					pushError(err, "tx ClearCommError ");
-			}
-			else
-			{
-				m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
-			}
-
-			if (len > 0)
-			{
-				if (::WriteFile(m_device_handle, &m_tx.buffer[rd], len, &bytes_written, &m_tx.overlapped) == FALSE)
-				{
-					const DWORD error = ::GetLastError();
-					if (error != ERROR_INVALID_FUNCTION)
-					{
-						if (error != ERROR_IO_PENDING)
-						{	// error
-							//::ClearCommBreak(m_device_handle);
-							::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read);
-							pushError(error, "tx WriteFile ");
-							return;
-						}
-					}
-					m_tx.overlapped_waiting = true;
-				}
-			}
-		}
-
-		if (m_tx.overlapped_waiting)
-		{
-			if (::GetOverlappedResult(m_device_handle, &m_tx.overlapped, &bytes_written, FALSE) == FALSE)
-			{
-				const DWORD error = ::GetLastError();
-				::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read);
-				//if (error == ERROR_SEM_TIMEOUT)
-				//	m_tx.overlapped_waiting = false;
-				if (error != ERROR_IO_INCOMPLETE)
-				{
-					pushError(error, "tx GetOverlappedResult ");
-					m_rx.overlapped_waiting = false;
-				}
-			}
-			else
-				m_tx.overlapped_waiting = false;
-		}
-	}
-
-	if (bytes_written > 0)
-	{
-		rd += bytes_written;
-		if (rd >= (int)m_tx.buffer.size())
-			rd -= m_tx.buffer.size();
-		m_tx.buffer_rd = rd;
-	}
-}
-
-void __fastcall CSerialPort::processRx()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return;
-
-	DWORD bytes_read = 0;
-
-	if (m_rx.overlapped.hEvent == INVALID_HANDLE_VALUE)
-	{	// non-overlapped
-
-		if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-		{
-			const DWORD error = ::GetLastError();
-			if (error != ERROR_INVALID_FUNCTION)
-				pushError(error, "rx ClearCommError ");
-		}
-		else
-		{
-			m_rx_break = (m_errors_read & CE_BREAK) ? true : false;
-		}
-		
-		const DWORD bytes_available = m_stat_read.cbInQue;
-
-//		if (bytes_available > 0)
-		{
-			if (m_buffer.size() <= bytes_available)
-				m_buffer.resize(bytes_available * 4);
-
-			if (::ReadFile(m_device_handle, &m_buffer[0], m_buffer.size(), &bytes_read, NULL) == FALSE)
-//			if (::ReadFile(m_device_handle, &m_buffer[0], bytes_available, &bytes_read, NULL) == FALSE)
-			{
-				pushError(::GetLastError(), "rx ReadFile ");
-				::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read);
-				return;
-			}
-		}
-	}
-	else
-	{	// overlapped
-
-		if (!m_rx.overlapped_waiting)
-		{
-			if (::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read) == FALSE)
-			{
-				const DWORD error = ::GetLastError();
-				if (error != ERROR_INVALID_FUNCTION)
-					pushError(error, "rx ClearCommError ");
-			}
-			else
-			{
-				m_rx_break  = (m_errors_read & CE_BREAK) ? true : false;
-			}
-
-			const DWORD bytes_available = m_stat_read.cbInQue;
-
-//			if (bytes_available > 0)
-			{
-				if (m_buffer.size() <= bytes_available)
-					m_buffer.resize(bytes_available * 4);
-
-				if (::ReadFile(m_device_handle, &m_buffer[0], m_buffer.size(), &bytes_read, &m_rx.overlapped) == FALSE)
-				{
-					const DWORD error = ::GetLastError();
-					if (error != ERROR_INVALID_FUNCTION)
-					{
-						if (error != ERROR_IO_PENDING)
-						{
-							::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read);
-							pushError(error, "rx ReadFile ");
-							return;
-						}
-					}
-					m_rx.overlapped_waiting = true;
-				}
-			}
-		}
-
-		if (m_rx.overlapped_waiting)
-		{
-			if (::GetOverlappedResult(m_device_handle, &m_rx.overlapped, &bytes_read, FALSE) == FALSE)
-			{
-				const DWORD error = ::GetLastError();
-				::ClearCommError(m_device_handle, &m_errors_read, &m_stat_read);
-				//if (error == ERROR_SEM_TIMEOUT)
-				//	m_rx.overlapped_waiting = false;
-				if (error != ERROR_IO_INCOMPLETE)
-				{
-					pushError(error, "rx GetOverlappedResult ");
-					m_rx.overlapped_waiting = false;
-				}
-			}
-			else
-				m_rx.overlapped_waiting = false;
-		}
-	}
-
-	if (bytes_read > 0)
-	{	// copy the received bytes into our rx buffer
-		int loops = 0;
-		int rd = 0;
-		while (loops++ < 100 && rd < (int)bytes_read)
-		{
-			int buf_rd = m_rx.buffer_rd;
-			int buf_wr = m_rx.buffer_wr;
-			int len = (buf_wr >= buf_rd) ? (int)m_rx.buffer.size() - buf_wr : buf_rd - buf_wr;
-			if (len > ((int)bytes_read - rd))
-				len = (int)bytes_read - rd;
-			if (len > 0)
-			{
-				memcpy(&m_rx.buffer[buf_wr], &m_buffer[rd], len);
-				rd += len;
-				buf_wr += len;
-				if (buf_wr >= (int)m_rx.buffer.size())
-					buf_wr -= m_rx.buffer.size();
-				m_rx.buffer_wr = buf_wr;
-			}
-			else
-			{	// wait a bit for the exec to free up some buffer space
-				Sleep(1);
-			}
-		}
-	}
-}
-
-void __fastcall CSerialPort::threadProcess()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE || m_thread == NULL)
-		return;
-
-	processTx();
-	processRx();
-}
-
-int __fastcall CSerialPort::RxBytesAvailable()
-{	// return number of available received bytes
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-#ifdef USE_THREAD
-	const int wr = m_rx.buffer_wr;
-	const int rd = m_rx.buffer_rd;
-	return (wr >= rd) ? wr - rd : (m_rx.buffer.size() - rd) + wr;
-#else
-
-#endif
-}
-
-int __fastcall CSerialPort::RxByte()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-#ifdef USE_THREAD
-	const int wr = m_rx.buffer_wr;
-
-	int rd = m_rx.buffer_rd;
-	if (rd == wr)
-		return -2;
-
-	const int i = m_rx.buffer[rd];
-	if (++rd >= (int)m_rx.buffer.size())
-		rd -= m_rx.buffer.size();
-
-	m_rx.buffer_rd = rd;
-#else
-
-
-#endif
-
-	return i;
-}
-
-int __fastcall CSerialPort::RxBytes(void *buf, int size)
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-#ifdef USE_THREAD
-	uint8_t *buffer = (uint8_t *)buf;
-	int bytes_written = 0;
-
-	while (bytes_written < size)
-	{
-		int buf_wr = m_rx.buffer_wr;
-		int buf_rd = m_rx.buffer_rd;
-		int len = (buf_wr >= buf_rd) ? buf_wr - buf_rd : m_rx.buffer.size() - buf_rd;
-		if (len > (size - bytes_written))
-			len = size - bytes_written;
-		if (len <= 0)
-			break;
-		memcpy(&buffer[bytes_written], &m_rx.buffer[buf_rd], len);
-		bytes_written += len;
-		buf_rd        += len;
-		if (buf_rd >= (int)m_rx.buffer.size())
-			buf_rd -= m_rx.buffer.size();
-		m_rx.buffer_rd = buf_rd;
-	}
-
-	return bytes_written;
-#else
-
-
-#endif
-}
-
-#ifdef USE_THREAD
-
-int __fastcall CSerialPort::RxBytePeek()
-{	// fetch a byte without removing it from the rx buffer
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-	const int wr = m_rx.buffer_wr;
-
-	int rd = m_rx.buffer_rd;
-	if (rd == wr)
-		return -2;
-
-	return (int)m_rx.buffer[rd];
-}
-
-int __fastcall CSerialPort::RxBytesPeek(void *buf, int size)
-{	// fetch bytes without removing them from the rx buffer
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-	uint8_t *buffer = (uint8_t *)buf;
-	int bytes_written = 0;
-
-	int buf_rd = m_rx.buffer_rd;
-
-	while (bytes_written < size)
-	{
-		int buf_wr = m_rx.buffer_wr;
-		int len = (buf_wr >= buf_rd) ? buf_wr - buf_rd : m_rx.buffer.size() - buf_rd;
-		if (len > (size - bytes_written))
-			len = size - bytes_written;
-		if (len <= 0)
-			break;
-		memcpy(&buffer[bytes_written], &m_rx.buffer[buf_rd], len);
-		bytes_written += len;
-		buf_rd        += len;
-		if (buf_rd >= (int)m_rx.buffer.size())
-			buf_rd -= m_rx.buffer.size();
-	}
-
-	return bytes_written;
-}
-
-bool __fastcall CSerialPort::TxEmpty()
-{
-	return (m_device_handle == INVALID_HANDLE_VALUE || m_tx.buffer_rd == m_tx.buffer_wr) ? true : false;
-}
-
-int __fastcall CSerialPort::TxBytesWaiting()
-{	// return number of queued transmit bytes
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-	const int rd = m_tx.buffer_rd;
-	const int wr = m_tx.buffer_wr;
-	const int bytes_available = (wr >= rd) ? wr - rd : (m_tx.buffer.size() - rd) + wr;
-
-	return bytes_available;
-}
-
-#endif
-
-int __fastcall CSerialPort::TxByte(const int b)
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-#ifdef USE_THREAD
-	const int buf_rd = m_tx.buffer_rd;
-	int       buf_wr = m_tx.buffer_wr;
-	int space_available = (buf_wr >= buf_rd) ? (int)m_tx.buffer.size() - (buf_wr - buf_rd) : buf_rd - buf_wr;
-	if (space_available > 0)
-		space_available--;
-	if (space_available < 1)
+	if (ReadBytes <= 0)
 		return 0;
 
-	m_tx.buffer[buf_wr] = (uint8_t)b;
-	if (++buf_wr >= (int)m_tx.buffer.size())
-		buf_wr -= m_tx.buffer.size();
+	if (num_of_bytes < (int)ReadBytes)
+		num_of_bytes = ReadBytes;
 
-	m_tx.buffer_wr = buf_wr;
-#else
+	ReadBytes = 0;
 
-#endif
+	res = ReadFile(device_handle, buf, (DWORD)num_of_bytes, &ReadBytes, (overlapped_Read.hEvent != NULL) ? &overlapped_Read : NULL);
+	if (!res)
+	{
+		LastError = GetLastError();
+		if (LastError != ERROR_IO_PENDING)
+		{
+			COMSTAT TempStat;
+			DWORD TempDword;
+			ClearCommError(device_handle, &TempDword, &TempStat);
+			ReadBytes = 0;
+		}
+		else
+		{
+			if (overlapped_Read.hEvent != NULL)
+				WaitForSingleObject(overlapped_Read.hEvent, 1);
+		}
+	}
 
-	return 1;
+	return (ReadBytes > 0) ? (int)ReadBytes : 0;
 }
 
-int __fastcall CSerialPort::TxBytes(const void *buf, int bytes)
+int CSerialPort::TxBytesWaiting()
+{	// return number of bytes waiting to be sent
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return -1;	// not connected
+
+	COMSTAT TempStat;
+	DWORD TempDword;
+
+	return (ClearCommError(device_handle, &TempDword, &TempStat)) ? (int)TempStat.cbOutQue : 0;
+}
+
+bool CSerialPort::TxChar(char c)
 {
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return false;	// not connected
+
+	unsigned long BytesWritten = 0;
+
+	const BOOL res = WriteFile(device_handle, &c, 1, &BytesWritten, (overlapped_Read.hEvent != NULL) ? &overlapped_Write : NULL);
+	if (!res)
+	{
+		LastError = GetLastError();
+		//	GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+
+		if (overlapped_Write.hEvent == NULL)
+			return false;
+
+		if (LastError == ERROR_IO_PENDING)
+		{
+			if (WaitForSingleObject(overlapped_Write.hEvent, 1000))
+			{
+				BytesWritten = 0;
+				return false;
+			}
+			GetOverlappedResult(device_handle, &overlapped_Write, &BytesWritten, FALSE);
+			overlapped_Write.Offset += BytesWritten;
+		}
+	}
+
+	return true;
+}
+
+int CSerialPort::TxBytes(void *buf, int bytes)
+{
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return -1;	// not connected
 
 	if (buf == NULL || bytes <= 0)
 		return 0;
 
-#ifdef USE_THREAD
-	uint8_t *buffer = (uint8_t *)buf;
+	int i = 0;
+	int Fails = 0;
+	unsigned char *data = (unsigned char *)buf;
 
-	const int buf_rd = m_tx.buffer_rd;
-	int       buf_wr = m_tx.buffer_wr;
-
-	int space_available = (buf_wr >= buf_rd) ? (int)m_tx.buffer.size() - (buf_wr - buf_rd) - 1 : buf_rd - buf_wr - 1;
-	if (space_available <= 0)
-		return 0;
-
-	if (bytes > space_available)
-		bytes = space_available;
-
-	int bytes_written = 0;
-
-	while (bytes_written < bytes)
+	while (i < bytes)
 	{
-		int len = (buf_wr >= buf_rd) ? (int)m_tx.buffer.size() - buf_wr : buf_rd - buf_wr;
-		if (len > (bytes - bytes_written))
-			len = bytes - bytes_written;
-		memcpy(&m_tx.buffer[buf_wr], &buffer[bytes_written], len);
-		bytes_written += len;
-		buf_wr        += len;
-		if (buf_wr >= (int)m_tx.buffer.size())
-			buf_wr -= m_tx.buffer.size();
+		if (device_handle == INVALID_HANDLE_VALUE)
+			return -2;	// not connected
+
+		unsigned long BytesWritten = 0;
+		DWORD j = bytes - i;
+
+		const BOOL res = WriteFile(device_handle, data + i, j, &BytesWritten, (overlapped_Write.hEvent != NULL) ? &overlapped_Write : NULL);
+		if (!res)
+		{
+			LastError = GetLastError();
+			//	GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+
+			if (overlapped_Write.hEvent == NULL)
+			{
+				COMSTAT TempStat;
+				DWORD TempDword;
+				ClearCommBreak(device_handle);
+				ClearCommError(device_handle, &TempDword, &TempStat);
+				BytesWritten = 0;
+				if (++Fails >= MaxFails)
+					return -3;
+			}
+			else
+			if (LastError == ERROR_IO_PENDING)
+			{
+				if (WaitForSingleObject(overlapped_Write.hEvent, 1000))
+				{
+					COMSTAT TempStat;
+					DWORD TempDword;
+					ClearCommBreak(device_handle);
+					ClearCommError(device_handle, &TempDword, &TempStat);
+					BytesWritten = 0;
+					if (++Fails >= MaxFails)
+						return -3;
+				}
+				else
+				{
+					GetOverlappedResult(device_handle, &overlapped_Write, &BytesWritten, FALSE);
+					overlapped_Write.Offset += BytesWritten;
+					if (--Fails < 0)
+						Fails = 0;
+				}
+			}
+		}
+		i += BytesWritten;
 	}
 
-	m_tx.buffer_wr = buf_wr;
-
-#else
-#endif
-
-	return bytes_written;
+	return i;
 }
 
-int __fastcall CSerialPort::TxBytes(const char *s)
+int CSerialPort::TxStr(char *s)
 {
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return -1;	// not connected
 
 	if (s == NULL)
-		return 0;
+		return -2;
 
-	const int len = (int)strlen(s);
+	int len = (int)strlen(s);
 	if (len <= 0)
-		return 0;
+		return -3;
 
 	return TxBytes(s, len);
 }
 
-int __fastcall CSerialPort::TxBytes(const STRING s)
+void CSerialPort::Flush()
 {
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return -1;
-
-	if (s.IsEmpty())
-		return 0;
-
-	#if defined(__BORLANDC__)
-		return TxBytes(s.c_str(), s.Length());
-	#elif defined(_MSC_VER)
-		return TxBytes(s.GetString(), s.GetLength());
-	#else
-		#error "FIX ME"
-	#endif
+	if (device_handle != INVALID_HANDLE_VALUE)
+		FlushFileBuffers(device_handle);
 }
 
-int __fastcall CSerialPort::GetBaudRate()
+char * CSerialPort::GetDeviceName()
 {
-	getState();
-
-	return m_dcb.BaudRate;
+	return device_name;
 }
 
-void __fastcall CSerialPort::SetBaudRate(int value)
+HANDLE CSerialPort::GetDeviceHandle()
 {
-	if (m_device_handle == INVALID_HANDLE_VALUE)
+	return device_handle;
+}
+
+int CSerialPort::GetReceiveQueue()
+{
+	return ReceiveQueue;
+}
+
+void CSerialPort::SetReceiveQueue(int NewReceiveQueue)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
 	{
-		m_dcb.BaudRate = value;
-		return;
+		if (ReceiveQueue != NewReceiveQueue)
+		{
+			Disconnect();
+			ReceiveQueue = NewReceiveQueue;
+			Connect(device_name);
+		}
+	}
+	else
+		ReceiveQueue = NewReceiveQueue;
+}
+
+int CSerialPort::GetTxQueue()
+{
+	return TransmitQueue;
+}
+
+void CSerialPort::SetTxQueue(int NewTransmitQueue)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+		if (TransmitQueue != NewTransmitQueue)
+		{
+			Disconnect();
+			TransmitQueue = NewTransmitQueue;
+			Connect(device_name);
+		}
+	}
+	else
+		TransmitQueue = NewTransmitQueue;
+}
+
+void CSerialPort::SetMaxFails(int NewMaxFails)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+		Disconnect();
+		MaxFails = NewMaxFails;
+		Connect(device_name);
+	}
+	else
+		MaxFails = NewMaxFails;
+}
+
+int CSerialPort::GetMaxFails()
+{
+	return MaxFails;
+}
+
+int CSerialPort::GetBaudRate()
+{
+	return MyDCB.BaudRate;
+}
+
+void CSerialPort::SetBaudRate(int NewBaudRate)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalDCB.BaudRate = NewBaudRate;
+//		MyDCB.BaudRate       = NewBaudRate;
+//
+//		SetCommState(device_handle, &MyDCB);
+
+		if ((int)MyDCB.BaudRate != NewBaudRate)
+		{
+			Disconnect();
+			MyDCB.BaudRate = NewBaudRate;
+			Connect(device_name);
+		}
+	}
+	else
+		MyDCB.BaudRate = NewBaudRate;
+}
+
+void CSerialPort::SetRTS(bool set)
+{
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return;	// not connected
+
+	if (set)
+	{
+		if (!EscapeCommFunction(device_handle, SETRTS))
+		{
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		}
+	}
+	else
+	{
+		if (!EscapeCommFunction(device_handle, CLRRTS))
+		{
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		}
+	}
+}
+
+void CSerialPort::SetDTR(bool set)
+{
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return;	// not connected
+
+	if (set)
+	{
+		if (!EscapeCommFunction(device_handle, SETDTR))
+		{
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		}
+	}
+	else
+	{
+		if (!EscapeCommFunction(device_handle, CLRDTR))
+		{
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		}
+	}
+}
+
+bool CSerialPort::GetCTS()
+{
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return false;	// not connected
+
+	if (!GetCommModemStatus(device_handle, &ModemState))
+	{
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		return false;
 	}
 
-	if ((int)m_dcb.BaudRate == value)
-		return;
-
-	m_dcb.BaudRate = value;
-	if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
-		pushError(::GetLastError(), "SetCommState ");
-
-	getState();
+	return (ModemState & MS_CTS_ON) ? true : false;
 }
 
-void __fastcall CSerialPort::SetRTS(bool value)
+bool CSerialPort::GetDSR()
 {
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return;
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return false;	// not connected
 
-	if (::EscapeCommFunction(m_device_handle, value ? SETRTS : CLRRTS) == FALSE)
-		pushError(::GetLastError(), "EscapeCommFunction ");
-
-	getState();
-}
-
-void __fastcall CSerialPort::SetDTR(bool value)
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return;
-
-	if (::EscapeCommFunction(m_device_handle, value ? SETDTR : CLRDTR) == FALSE)
-		pushError(::GetLastError(), "EscapeCommFunction ");
-
-	getState();
-}
-
-bool __fastcall CSerialPort::GetCTS()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return false;
-
-	getState();
-
-	return (m_modem_state_read & MS_CTS_ON) ? true : false;
-}
-
-bool __fastcall CSerialPort::GetDSR()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return false;
-
-	getState();
-
-	return (m_modem_state_read & MS_DSR_ON) ? true : false;
-}
-
-bool __fastcall CSerialPort::GetRING()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return false;
-
-	getState();
-
-	return (m_modem_state_read & MS_RING_ON) ? true : false;
-}
-
-bool __fastcall CSerialPort::GetRLSD()
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
-		return false;
-
-	getState();
-
-	return (m_modem_state_read & MS_RLSD_ON) ? true : false;
-}
-
-int __fastcall CSerialPort::GetByteSize()
-{
-	getState();
-
-	return m_dcb.ByteSize;
-}
-
-void __fastcall CSerialPort::SetByteSize(int value)
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
+	if (!GetCommModemStatus(device_handle, &ModemState))
 	{
-		m_dcb.ByteSize = (BYTE)value;
-		return;
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		return false;
 	}
 
-	if (m_dcb.ByteSize == (BYTE)value)
-		return;
-
-	m_dcb.ByteSize = (BYTE)value;
-	if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
-		pushError(::GetLastError(), "SetCommState ");
-
-	getState();
+	return (ModemState & MS_DSR_ON) ? true : false;
 }
 
-int __fastcall CSerialPort::GetParity()
+bool CSerialPort::GetRING()
 {
-	getState();
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return false;	// not connected
 
-	return m_dcb.Parity;
-}
-
-void __fastcall CSerialPort::SetParity(int value)
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
+	if (!GetCommModemStatus(device_handle, &ModemState))
 	{
-		m_dcb.Parity = (BYTE)value;
-		return;
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		return false;
 	}
 
-	if (m_dcb.Parity == (BYTE)value)
-		return;
-
-	m_dcb.Parity = (BYTE)value;
-	if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
-		pushError(::GetLastError(), "SetCommState ");
-
-	getState();
+	return (ModemState & MS_RING_ON) ? true : false;
 }
 
-int __fastcall CSerialPort::GetStopBits()
+bool CSerialPort::GetRLSD()
 {
-	getState();
+	if (device_handle == INVALID_HANDLE_VALUE)
+		return false;	// not connected
 
-	return m_dcb.StopBits;
-}
-
-void __fastcall CSerialPort::SetStopBits(int value)
-{
-	if (m_device_handle == INVALID_HANDLE_VALUE)
+	if (!GetCommModemStatus(device_handle, &ModemState))
 	{
-		m_dcb.StopBits = (BYTE)value;
-		return;
+		LastError = GetLastError();
+//		GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+		return false;
 	}
 
-	if (m_dcb.StopBits == (BYTE)value)
-		return;
+	return (ModemState & MS_RLSD_ON) ? true : false;
+}
 
-	m_dcb.StopBits = (BYTE)value;
-	if (::SetCommState(m_device_handle, &m_dcb) == FALSE)
-		pushError(::GetLastError(), "SetCommState ");
+int CSerialPort::GetByteSize()
+{
+	return MyDCB.ByteSize;
+}
 
-	getState();
+void CSerialPort::SetByteSize(int NewByteSize)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalDCB.ByteSize = NewByteSize;
+//		MyDCB.ByteSize       = NewByteSize;
+//		SetCommState(device_handle, &MyDCB);
+
+		if (MyDCB.ByteSize != (BYTE)NewByteSize)
+		{
+			Disconnect();
+			MyDCB.ByteSize = (BYTE)NewByteSize;
+			Connect(device_name);
+		}
+	}
+	else
+		MyDCB.ByteSize = (BYTE)NewByteSize;
+}
+
+int CSerialPort::GetParity()
+{
+	return MyDCB.Parity;
+}
+
+void CSerialPort::SetParity(int NewParity)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalDCB.Parity = NewParity;
+//		MyDCB.Parity = NewParity;
+//		SetCommState(device_handle, &MyDCB);
+
+		if (MyDCB.Parity != (BYTE)NewParity)
+		{
+			Disconnect();
+			MyDCB.Parity = (BYTE)NewParity;
+			Connect(device_name);
+		}
+	}
+	else
+		MyDCB.Parity = (BYTE)NewParity;
+}
+
+int CSerialPort::GetStopBits()
+{
+	return MyDCB.StopBits;
+}
+
+void CSerialPort::SetStopBits(int NewStopBits)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalDCB.StopBits = NewStopBits;
+//		MyDCB.StopBits = NewStopBits;
+//		SetCommState(device_handle, &MyDCB);
+
+		if (MyDCB.StopBits != (BYTE)NewStopBits)
+		{
+			Disconnect();
+			MyDCB.StopBits = (BYTE)NewStopBits;
+			Connect(device_name);
+		}
+	}
+	else
+		MyDCB.StopBits = (BYTE)NewStopBits;
+}
+
+int CSerialPort::GetReadIntervalTimeout()
+{
+	return MyTimeouts.ReadIntervalTimeout;
+}
+
+void CSerialPort::SetReadIntervalTimeout(int NewReadIntervalTimeout)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalTimeouts.ReadIntervalTimeout = NewReadIntervalTimeout;
+//		MyTimeouts.ReadIntervalTimeout = NewReadIntervalTimeout;
+//		SetCommTimeouts(device_handle, &MyTimeouts);
+
+		if ((int)MyTimeouts.ReadIntervalTimeout != NewReadIntervalTimeout)
+		{
+			Disconnect();
+			MyTimeouts.ReadIntervalTimeout = NewReadIntervalTimeout;
+			Connect(device_name);
+		}
+	}
+	else
+		MyTimeouts.ReadIntervalTimeout = NewReadIntervalTimeout;
+}
+
+int CSerialPort::GetReadTotalTimeoutMultiplier()
+{
+	return MyTimeouts.ReadTotalTimeoutMultiplier;
+}
+
+void CSerialPort::SetReadTotalTimeoutMultiplier(int NewReadTotalTimeoutMultiplier)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalTimeouts.ReadTotalTimeoutMultiplier = NewReadTotalTimeoutMultiplier;
+//		MyTimeouts.ReadTotalTimeoutMultiplier = NewReadTotalTimeoutMultiplier;
+//		SetCommTimeouts(device_handle, &MyTimeouts);
+
+		if ((int)MyTimeouts.ReadTotalTimeoutMultiplier != NewReadTotalTimeoutMultiplier)
+		{
+			Disconnect();
+			MyTimeouts.ReadTotalTimeoutMultiplier = NewReadTotalTimeoutMultiplier;
+			Connect(device_name);
+		}
+	}
+	else
+		MyTimeouts.ReadTotalTimeoutMultiplier = NewReadTotalTimeoutMultiplier;
+}
+
+int CSerialPort::GetReadTotalTimeoutConstant()
+{
+	return MyTimeouts.ReadTotalTimeoutConstant;
+}
+
+void CSerialPort::SetReadTotalTimeoutConstant(int NewReadTotalTimeoutConstant)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalTimeouts.ReadTotalTimeoutConstant = NewReadTotalTimeoutConstant;
+//		MyTimeouts.ReadTotalTimeoutConstant = NewReadTotalTimeoutConstant;
+//		SetCommTimeouts(device_handle, &MyTimeouts);
+
+		if ((int)MyTimeouts.ReadTotalTimeoutConstant != NewReadTotalTimeoutConstant)
+		{
+			Disconnect();
+			MyTimeouts.ReadTotalTimeoutConstant = NewReadTotalTimeoutConstant;
+			Connect(device_name);
+		}
+	}
+	else
+		MyTimeouts.ReadTotalTimeoutConstant = NewReadTotalTimeoutConstant;
+}
+
+int CSerialPort::GetWriteTotalTimeoutMultiplier()
+{
+	return MyTimeouts.WriteTotalTimeoutMultiplier;
+}
+
+void CSerialPort::SetWriteTotalTimeoutMultiplier(int NewWriteTotalTimeoutMultiplier)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalTimeouts.WriteTotalTimeoutMultiplier = NewWriteTotalTimeoutMultiplier;
+//		MyTimeouts.WriteTotalTimeoutMultiplier = NewWriteTotalTimeoutMultiplier;
+//		SetCommTimeouts(device_handle, &MyTimeouts);
+
+		if ((int)MyTimeouts.WriteTotalTimeoutMultiplier != NewWriteTotalTimeoutMultiplier)
+		{
+			Disconnect();
+			MyTimeouts.WriteTotalTimeoutMultiplier = NewWriteTotalTimeoutMultiplier;
+			Connect(device_name);
+		}
+	}
+	else
+		MyTimeouts.WriteTotalTimeoutMultiplier = NewWriteTotalTimeoutMultiplier;
+}
+
+int CSerialPort::GetWriteTotalTimeoutConstant()
+{
+	return MyTimeouts.WriteTotalTimeoutConstant;
+}
+
+void CSerialPort::SetWriteTotalTimeoutConstant(int NewWriteTotalTimeoutConstant)
+{
+	if (device_handle != INVALID_HANDLE_VALUE)
+	{
+//		OriginalTimeouts.WriteTotalTimeoutConstant = NewWriteTotalTimeoutConstant;
+//		MyTimeouts.WriteTotalTimeoutConstant = NewWriteTotalTimeoutConstant;
+//		SetCommTimeouts(device_handle, &MyTimeouts);
+
+		if ((int)MyTimeouts.WriteTotalTimeoutConstant != NewWriteTotalTimeoutConstant)
+		{
+			Disconnect();
+			MyTimeouts.WriteTotalTimeoutConstant = NewWriteTotalTimeoutConstant;
+			Connect(device_name);
+		}
+	}
+	else
+		MyTimeouts.WriteTotalTimeoutConstant = NewWriteTotalTimeoutConstant;
 }
 
 // ********************************************

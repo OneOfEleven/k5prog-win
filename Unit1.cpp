@@ -711,8 +711,8 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 	m_serial.port.stopBits = ONESTOPBIT;
 	m_serial.port.baudRate = baudrate;
 
-	const int res = m_serial.port.Connect(port_name.c_str(), true);
-	if (res != ERROR_SUCCESS)
+	const bool res = m_serial.port.Connect(port_name.c_str());
+	if (!res)
 	{
 		s.printf("error: serial port open error [%d]", res);
 		Memo1->Lines->Add(s);
@@ -993,26 +993,26 @@ void __fastcall TForm1::Timer1Timer(TObject *Sender)
 		updated = true;
 	}
 
-	if (m_serial.port.connected)
-		s = m_serial.port.rx_break ? "RX BREAK" : "";
-	else
-		s = "";
-	if (StatusBar1->Panels->Items[1]->Text != s)
-	{
-		StatusBar1->Panels->Items[1]->Text = s;
-		updated = true;
-	}
+//	if (m_serial.port.connected)
+//		s = m_serial.port.rx_break ? "RX BREAK" : "";
+//	else
+//		s = "";
+//	if (StatusBar1->Panels->Items[1]->Text != s)
+//	{
+//		StatusBar1->Panels->Items[1]->Text = s;
+//		updated = true;
+//	}
 
 	if (updated)
 		StatusBar1->Update();
 
 	// **************************
 
-	while (m_serial.port.errorCount() > 0)
-	{
-		s = m_serial.port.pullError();
-		Memo1->Lines->Add("serial error: " + s);
-	}
+//	while (m_serial.port.errorCount() > 0)
+//	{
+//		s = m_serial.port.pullError();
+//		Memo1->Lines->Add("serial error: " + s);
+//	}
 
 	// **************************
 }
@@ -1693,6 +1693,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 		Memo1->Update();
 	}
 
+	// header
 	buffer[0] = 0x1D;                      // LS-Byte command
 	buffer[1] = 0x05;                      // MS-Byte command
 	buffer[2] = ((8 + len) >> 0) & 0xff;   // LS-Byte size
@@ -1701,7 +1702,7 @@ int __fastcall TForm1::k5_write_eeprom(uint8_t *buf, const int len, const int of
 	buffer[4] = (offset >> 0) & 0xff;      // addr LS-Byte
 	buffer[5] = (offset >> 8) & 0xff;      // addr MS-Byte
 	buffer[6] = len;                       // length
-	buffer[7] = 0x01;                      // allow password
+	buffer[7] = 1;                         // allow password
 
 	memcpy(&buffer[8], session_id, 4);
 
@@ -2472,10 +2473,12 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 		return;
 	}
 
-	const int size      = sizeof(m_config);
-	const int block_len = UVK5_CONFIG_BLOCKSIZE;
-
 	memset(m_config, 0, sizeof(m_config));
+
+	const int size = sizeof(m_config);
+//	const int size = UVK5_CONFIG_SIZE;
+
+	const int block_len = UVK5_CONFIG_BLOCKSIZE;
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;
@@ -2519,7 +2522,7 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	// *******************************************
 	// save the radios configuration data
 
-	if (m_verbose > 2)
+	if (m_verbose >= 1)
 	{	// show the config contents
 		Memo1->Lines->BeginUpdate();
 		Memo1->Lines->Add("");
@@ -2597,7 +2600,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	Memo1->Lines->Add(m_loadfile_name);
 	Memo1->Update();
 
-	if (m_loadfile_data.size() < 1000)
+	if (m_loadfile_data.size() < 2000)
 	{
 		Application->BringToFront();
 		Application->NormalizeTopMosts();
@@ -3007,7 +3010,7 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("writing config area ..");
 
-	int size = m_loadfile_data.size();
+	const int size = m_loadfile_data.size();
 
 	CGauge1->MaxValue = size;
 	CGauge1->Progress = 0;

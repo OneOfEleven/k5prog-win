@@ -73,6 +73,7 @@
 #define UVK5_CONFIG_SIZE                     0x00001d00   // 7424
 #define UVK5_CALIB_SIZE                      0x00000200   // 512
 #define UVK5_MAX_CONFIG_SIZE                 0x00002000   // 8192
+
 #define UVK5_CONFIG_BLOCKSIZE                128          //
 
 #define UVK5_FLASH_SIZE                      0x0000f000   // 61440
@@ -149,7 +150,7 @@ struct k5_command
 //typedef struct __attribute__((packed, aligned(1)))
 typedef struct
 {
-	struct                                      // 0x0000
+	struct                                      // 0x1E00
 	{
 		uint8_t open_rssi_thresh[10];
 		uint8_t unused1[6];
@@ -170,10 +171,10 @@ typedef struct
 		uint8_t unused6[6];
 	} squelch[2];
 
-	uint16_t unknown1[4];                      // 0x00C0
-	uint16_t rssi[4];                          // 0x00C8
+	uint16_t rssi_uhf[4];                      // 0x1EC0
+	uint16_t rssi_vhf[4];                      // 0x1EC8
 
-	struct                                     // 0x00D0
+	struct                                     // 0x1ED0
 	{
 		uint8_t low_tx_pwr[3];
 		uint8_t mid_tx_pwr[3];
@@ -181,19 +182,19 @@ typedef struct
 		uint8_t unused[7];
 	} band_setting[7];
 
-	uint16_t battery[6];                       // 0x0140
+	uint16_t battery[6];                       // 0x1F40
 	uint8_t  unused1[4];
 
-	struct                                     // 0x0150
+	struct                                     // 0x1F50
 	{
 		uint16_t threshold[10];
 		uint8_t  unused[4];
 	} vox[2];
 
-	uint8_t  mic_gain_dB2[5];                  // 0x0180
+	uint8_t  mic_gain_dB2[5];                  // 0x1F80
 	uint8_t  unused4[3];
 
-	int16_t  bk4819_xtal_freq_low;             // 0x0188
+	int16_t  bk4819_xtal_freq_low;             // 0x1F88
 	uint16_t unknown2;
 	uint16_t unknown3;
 	uint8_t  volume_gain;
@@ -351,8 +352,7 @@ private:
 
 	int                   m_verbose;
 
-//	uint8_t               m_config[UVK5_MAX_CONFIG_SIZE];
-	uint8_t               m_config[UVK5_CONFIG_SIZE];
+	uint8_t               m_config[UVK5_MAX_CONFIG_SIZE];
 	uint8_t               m_calib[UVK5_CALIB_SIZE];
 
 	std::vector < std::vector <uint8_t> > m_rx_packet_queue;
