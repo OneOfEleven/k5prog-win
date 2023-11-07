@@ -6,6 +6,8 @@
 
 #include <vector>
 
+//#define SERIAL_OVERLAPPED
+
 typedef struct
 {
 	char name[MAX_PATH];
@@ -116,6 +118,9 @@ public:
 	bool GetDSR();
 	bool GetRING();
 	bool GetRLSD();
+	#ifdef SERIAL_OVERLAPPED
+		bool GetBreak();
+	#endif
 
 	void Flush();
 

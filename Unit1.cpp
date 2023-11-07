@@ -193,6 +193,9 @@ void __fastcall TForm1::FormCreate(TObject *Sender)
 
 	memset(m_config, 0, sizeof(m_config));
 
+	m_rx_str = "";
+	m_rx_mode = 0;
+	
 	m_serial.port_name = "";
 	//m_serial.port;
 	m_serial.rx_buffer.resize(2048);
@@ -263,7 +266,7 @@ void __fastcall TForm1::FormDestroy(TObject *Sender)
 
 void __fastcall TForm1::FormClose(TObject *Sender, TCloseAction &Action)
 {
-	if (m_thread != NULL)
+/*	if (m_thread != NULL)
 	{	// we are busy reading/writing from/to the radio
 
 		Application->BringToFront();
@@ -280,7 +283,7 @@ void __fastcall TForm1::FormClose(TObject *Sender, TCloseAction &Action)
 				return;
 		}
 	}
-
+*/
 	Timer1->Enabled = false;
 
 	disconnect();
@@ -490,6 +493,16 @@ void __fastcall TForm1::WMDisconnect(TMessage &msg)
 	disconnect();
 }
 
+void __fastcall TForm1::WMBreak(TMessage &msg)
+{
+	if (m_breaks < 10)
+	{
+		String s;
+		s.printf("comm breaks %d", m_breaks);
+		Memo1->Lines->Add(s);
+	}
+}
+
 void __fastcall TForm1::loadSettings()
 {
 	int          i;
@@ -668,8 +681,8 @@ void __fastcall TForm1::disconnect()
 
 	m_serial.rx_buffer_wr = 0;
 
-	SerialPortComboBox->Enabled  = false;
-	SerialSpeedComboBox->Enabled = false;
+//	SerialPortComboBox->Enabled  = false;
+//	SerialSpeedComboBox->Enabled = false;
 }
 
 bool __fastcall TForm1::connect(const bool clear_memo)
@@ -692,7 +705,9 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 		return false;
 	port_name = SerialPortComboBox->Items->Strings[i].Trim();
 	if (port_name.IsEmpty() || port_name.LowerCase() == "none")
+	{
 		return false;
+	}
 
 	i = SerialSpeedComboBox->ItemIndex;
 	if (i < 0)
@@ -702,6 +717,13 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 	{	// error
 		Memo1->Lines->Add("error: serial baudrate: [" + IntToStr(baudrate) + "]");
 		return false;
+	}
+
+	m_breaks = 0;
+	m_rx_str = "";
+	{
+		CCriticalSection cs(m_rx_lines_cs);
+		m_rx_lines.resize(0);
 	}
 
 	m_serial.port.rts      = false;
@@ -716,6 +738,9 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 	{
 		s.printf("error: serial port open error [%d]", res);
 		Memo1->Lines->Add(s);
+
+		SerialPortComboBox->Enabled  = true;
+		SerialSpeedComboBox->Enabled = true;
 		return false;
 	}
 
@@ -745,8 +770,8 @@ bool __fastcall TForm1::connect(const bool clear_memo)
 		}
 	}
 
-	SerialPortComboBox->Enabled  = false;
-	SerialSpeedComboBox->Enabled = false;
+//	SerialPortComboBox->Enabled  = false;
+//	SerialSpeedComboBox->Enabled = false;
 
 	return true;
 }
@@ -767,6 +792,15 @@ void __fastcall TForm1::threadProcess()
 	// save any rx'ed bytes from the serial port into our RX buffer
 
 	int num_bytes = 0;
+	
+#ifdef SERIAL_OVERLAPPED
+	if (m_serial.port.GetBreak())
+	{
+		m_breaks++;
+		::PostMessage(this->Handle, WM_BREAK, 0, 0);
+		return;
+	}
+#endif
 
 	const int rx_space = m_serial.rx_buffer.size() - m_serial.rx_buffer_wr;	// space we have left to store RX data
 	if (rx_space > 0)
@@ -788,135 +822,172 @@ void __fastcall TForm1::threadProcess()
 		}
 	}
 
-	// *********
-	// extract any rx'ed packets found in our RX buffer
+	// **********************************
 
 	if (m_serial.rx_buffer_wr > 0 && m_serial.rx_timer.millisecs() >= 5000)
-		m_serial.rx_buffer_wr = 0;		// no data rx'ed fro 2 seconds .. empty the rx buffer
-
-	while (m_serial.rx_buffer_wr >= 8)   // '8' is the very minimum packet size
 	{
-		if (m_serial.rx_buffer[0] != 0xAB || m_serial.rx_buffer[1] != 0xCD)
-		{
-			// scan for a start byte
-			int i = 1;
-			while (m_serial.rx_buffer[i] != 0xAB && i < (int)m_serial.rx_buffer_wr)
-				i++;
-
-			if (i < (int)m_serial.rx_buffer_wr)
-			{	// possible start byte found - remove all rx'ed bytes before it
-				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[i], m_serial.rx_buffer_wr - i);
-				m_serial.rx_buffer_wr -= i;
-			}
-			else
-			{	// no start byte found - remove all rx'ed bytes
-				m_serial.rx_buffer_wr = 0;
-			}
-
-			continue;
-		}
-
-		// fetch the payload size
-		const int data_len   = ((uint16_t)m_serial.rx_buffer[3] << 8) | ((uint16_t)m_serial.rx_buffer[2] << 0);
-		if (data_len > 270)
-		{	// too big .. assume it's an error
-			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
-			m_serial.rx_buffer_wr--;
-			continue;
-		}
-
-		// complete packet length
-		// includes the 4-byte header, payload, 2-byte CRC and 2-byte footer
-		const int packet_len = 4 + data_len + 2 + 2;
-
-		if ((int)m_serial.rx_buffer_wr < packet_len)
-			break;	// not yet received the complete packet
-
-		if (m_serial.rx_buffer[packet_len - 2] != 0xDC || m_serial.rx_buffer[packet_len - 1] != 0xBA)
-		{	// invalid end bytes - slide the data down one byte
-			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
-			m_serial.rx_buffer_wr--;
-			continue;
-		}
-
-		// appear to have a complete packet
-
-		if (data_len > 0)
-		{	// save the RX'ed packet
-
-			// copy/extract the packets payload into a separate buffer
-			std::vector <uint8_t> rx_data(data_len + 2);
-			memcpy(&rx_data[0], &m_serial.rx_buffer[4], data_len + 2);
-
-			#if 1
-				if (m_thread->Sync && m_verbose > 2)
-				{	// show the raw packet
-					String s;
-					s.printf("rx [%3u] ", packet_len);
-					for (int i = 0; i < packet_len; i++)
-					{
-						String s2;
-						s2.printf("%02X ", m_serial.rx_buffer[i]);
-						s += s2;
-					}
-					Memo1->Lines->Add(s.Trim());
-					Memo1->Update();
-				}
-			#endif
-
-			// CRC bytes before de-obfuscation
-			const uint16_t crc0 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
-
-			// de-obfuscate (de-scramble) the payload (the data and 16-bit CRC are the scrambled bytes)
-			k5_xor_payload(&rx_data[0], rx_data.size());
-
-			// CRC bytes after de-obfuscation
-			const uint16_t crc1 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
-
-			#if 1
-				if (m_thread->Sync && m_verbose > 2)
-				{	// show the de-scrambled payload
-					String s;
-					s.printf("rx [%3u]             ", m_rx_packet_queue.size());
-					for (size_t i = 0; i < rx_data.size(); i++)
-					{
-						String s2;
-						s2.printf("%02X ", rx_data[i]);
-						s += s2;
-					}
-					Memo1->Lines->Add(s.Trim());
-					Memo1->Update();
-				}
-			#endif
-
-			if (crc0 != 0xffff && crc1 != 0xffff)
-			{	// compute and check the CRC
-				const uint16_t crc2 = crc16(&rx_data[0], rx_data.size() - 2);
-				if (crc2 != crc1)
-					rx_data.resize(0);	// CRC error .. dump the payload
-			}
-
-			if (!rx_data.empty())
-			{	// we have a payload to save
-
-				// drop the 16-bit CRC off the end
-				//rx_data.resize(data_len);
-
-				// append the RX'ed payload onto the RX queue
-				if (m_rx_packet_queue.size() < 4)    // don't bother saving any more than 4 packets/payloads, the radios bootloader sends continuously when in firmware update mode
-					m_rx_packet_queue.push_back(rx_data);
-			}
-		}
-
-		// remove the spent packet from the RX buffer
-		if (packet_len < (int)m_serial.rx_buffer_wr)
-			memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[packet_len], m_serial.rx_buffer_wr - packet_len);
-		m_serial.rx_buffer_wr -= packet_len;
-
-//		break;       // only extract one packet per thread loop - gives more time to the exec
+		m_serial.rx_buffer_wr = 0;		// no data rx'ed for 2 seconds .. empty the rx buffer
+		m_rx_str = "";
 	}
 
-	// *********
+	if (m_rx_mode == 0)
+	{	// normal text mode
+
+		unsigned int i = 0;
+
+		while (i < m_serial.rx_buffer_wr && i < m_serial.rx_buffer.size())
+		{
+			const char c = m_serial.rx_buffer[i++];
+			if (c < 32)
+			{
+				if (c == '\n')
+				{
+					CCriticalSection cs(m_rx_lines_cs);
+					m_rx_lines.push_back(m_rx_str.TrimRight());
+					m_rx_str = "";
+				}
+				else
+				if (c != '\r')
+				{
+					if (m_rx_str.Length() < 512)
+					{
+						String s2;
+						s2.printf("[%02X]", (uint8_t)c);
+						m_rx_str += s2;
+					}
+				}
+			}
+			else
+				m_rx_str += c;
+		}
+
+		m_serial.rx_buffer_wr = 0;
+	}
+	else
+	{	// extract any rx'ed packets found in our RX buffer
+
+		while (m_serial.rx_buffer_wr >= 8)   // '8' is the very minimum packet size
+		{
+			if (m_serial.rx_buffer[0] != 0xAB || m_serial.rx_buffer[1] != 0xCD)
+			{
+				// scan for a start byte
+				int i = 1;
+				while (m_serial.rx_buffer[i] != 0xAB && i < (int)m_serial.rx_buffer_wr)
+					i++;
+
+				if (i < (int)m_serial.rx_buffer_wr)
+				{	// possible start byte found - remove all rx'ed bytes before it
+					memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[i], m_serial.rx_buffer_wr - i);
+					m_serial.rx_buffer_wr -= i;
+				}
+				else
+				{	// no start byte found - remove all rx'ed bytes
+					m_serial.rx_buffer_wr = 0;
+				}
+
+				continue;
+			}
+
+			// fetch the payload size
+			const int data_len   = ((uint16_t)m_serial.rx_buffer[3] << 8) | ((uint16_t)m_serial.rx_buffer[2] << 0);
+			if (data_len > 270)
+			{	// too big .. assume it's an error
+				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
+				m_serial.rx_buffer_wr--;
+				continue;
+			}
+
+			// complete packet length
+			// includes the 4-byte header, payload, 2-byte CRC and 2-byte footer
+			const int packet_len = 4 + data_len + 2 + 2;
+
+			if ((int)m_serial.rx_buffer_wr < packet_len)
+				break;	// not yet received the complete packet
+
+			if (m_serial.rx_buffer[packet_len - 2] != 0xDC || m_serial.rx_buffer[packet_len - 1] != 0xBA)
+			{	// invalid end bytes - slide the data down one byte
+				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[1], m_serial.rx_buffer_wr - 1);
+				m_serial.rx_buffer_wr--;
+				continue;
+			}
+
+			// appear to have a complete packet
+
+			if (data_len > 0)
+			{	// save the RX'ed packet
+
+				// copy/extract the packets payload into a separate buffer
+				std::vector <uint8_t> rx_data(data_len + 2);
+				memcpy(&rx_data[0], &m_serial.rx_buffer[4], data_len + 2);
+
+				#if 1
+					if (m_thread->Sync && m_verbose > 2)
+					{	// show the raw packet
+						String s;
+						s.printf("rx [%3u] ", packet_len);
+						for (int i = 0; i < packet_len; i++)
+						{
+							String s2;
+							s2.printf("%02X ", m_serial.rx_buffer[i]);
+							s += s2;
+						}
+						Memo1->Lines->Add(s.Trim());
+						Memo1->Update();
+					}
+				#endif
+
+				// CRC bytes before de-obfuscation
+				const uint16_t crc0 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
+
+				// de-obfuscate (de-scramble) the payload (the data and 16-bit CRC are the scrambled bytes)
+				k5_xor_payload(&rx_data[0], rx_data.size());
+
+				// CRC bytes after de-obfuscation
+				const uint16_t crc1 = ((uint16_t)rx_data[rx_data.size() - 1] << 8) | ((uint16_t)rx_data[rx_data.size() - 2] << 0);
+
+				#if 1
+					if (m_thread->Sync && m_verbose > 2)
+					{	// show the de-scrambled payload
+						String s;
+						s.printf("rx [%3u]             ", m_rx_packet_queue.size());
+						for (size_t i = 0; i < rx_data.size(); i++)
+						{
+							String s2;
+							s2.printf("%02X ", rx_data[i]);
+							s += s2;
+						}
+						Memo1->Lines->Add(s.Trim());
+						Memo1->Update();
+					}
+				#endif
+
+				if (crc0 != 0xffff && crc1 != 0xffff)
+				{	// compute and check the CRC
+					const uint16_t crc2 = crc16(&rx_data[0], rx_data.size() - 2);
+					if (crc2 != crc1)
+						rx_data.resize(0);	// CRC error .. dump the payload
+				}
+
+				if (!rx_data.empty())
+				{	// we have a payload to save
+
+					// drop the 16-bit CRC off the end
+					//rx_data.resize(data_len);
+
+					// append the RX'ed payload onto the RX queue
+					if (m_rx_packet_queue.size() < 4)    // don't bother saving any more than 4 packets/payloads, the radios bootloader sends continuously when in firmware update mode
+						m_rx_packet_queue.push_back(rx_data);
+				}
+			}
+
+			// remove the spent packet from the RX buffer
+			if (packet_len < (int)m_serial.rx_buffer_wr)
+				memmove(&m_serial.rx_buffer[0], &m_serial.rx_buffer[packet_len], m_serial.rx_buffer_wr - packet_len);
+			m_serial.rx_buffer_wr -= packet_len;
+
+//			break;       // only extract one packet per thread loop - gives more time to the exec
+		}
+	}
 }
 
 std::vector <String> __fastcall TForm1::stringSplit(String s, String separator)
@@ -993,16 +1064,31 @@ void __fastcall TForm1::Timer1Timer(TObject *Sender)
 		updated = true;
 	}
 
-//	if (m_serial.port.connected)
-//		s = m_serial.port.rx_break ? "RX BREAK" : "";
-//	else
-//		s = "";
-//	if (StatusBar1->Panels->Items[1]->Text != s)
-//	{
-//		StatusBar1->Panels->Items[1]->Text = s;
-//		updated = true;
-//	}
+	#ifdef SERIAL_OVERLAPPED
+		s = (m_serial.port.connected && m_serial.port.GetBreak()) ? "RX BREAK" : "";
+		if (StatusBar1->Panels->Items[1]->Text != s)
+		{
+			StatusBar1->Panels->Items[1]->Text = s;
+			updated = true;
+		}
+	#endif
+	
+	if (StatusBar1->Panels->Items[2]->Text != m_rx_str)
+	{
+		StatusBar1->Panels->Items[2]->Text = m_rx_str;
+		updated = true;
+	}
 
+	{
+		CCriticalSection cs(m_rx_lines_cs);
+		while (!m_rx_lines.empty())
+		{
+			String s = m_rx_lines[0];
+			m_rx_lines.erase(m_rx_lines.begin());
+			Memo1->Lines->Add(s);
+		}
+	}
+	
 	if (updated)
 		StatusBar1->Update();
 
@@ -2428,8 +2514,7 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 {
 	String  s;
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	// *******************************************
 	// download the radios configuration data
@@ -2437,6 +2522,8 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	Memo1->Clear();
 	Memo1->Lines->Add("");
 	Memo1->Update();
+
+	m_rx_mode = 1;
 
 	if (!connect(false))
 		return;
@@ -2462,6 +2549,10 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 	if (r < 0)
@@ -2470,6 +2561,10 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2497,6 +2592,10 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 
@@ -2538,7 +2637,12 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	const bool ok = SaveDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	String name = SaveDialog1->FileName;
 	String ext  = ExtractFileExt(name).LowerCase();
@@ -2551,6 +2655,9 @@ void __fastcall TForm1::ReadConfigButtonClick(TObject *Sender)
 	saveFile(name, &m_config[0], size);
 
 	// *******************************************
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
@@ -2558,8 +2665,7 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	String s;
 	uint8_t flash[UVK5_MAX_FLASH_SIZE];
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	// *******************************************
 	// load the firmware file in
@@ -2570,7 +2676,12 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	const bool ok = OpenDialog3->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	String name = OpenDialog3->FileName;
 	String ext  = ExtractFileExt(name).LowerCase();
@@ -2589,6 +2700,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("No data loaded", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2606,6 +2721,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("File appears to be to small to be a firmware file", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2688,6 +2807,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("File doesn't appear to be valid for uploading", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2698,6 +2821,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		s.printf("File is to large to be a firmware file (max 0x%05X)", UVK5_MAX_FLASH_SIZE);
 		Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2715,6 +2842,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 					break;
 				case IDNO:
 				case IDCANCEL:
+
+					m_rx_mode = 0;
+					connect(false);
+
 					return;
 			}
 		#else
@@ -2723,6 +2854,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			s.printf("File runs into bootloader area (0x%04X)\n\nUpload cancelled", UVK5_FLASH_SIZE);
 			Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 			Application->RestoreTopMosts();
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		#endif
 	}
@@ -2745,8 +2880,15 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("");
 
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -2772,6 +2914,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			Memo1->Lines->Add("");
 			Memo1->Lines->Add("radio not detected");
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 		if (r > 0)
@@ -2780,6 +2926,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			Memo1->Lines->Add("");
 			Memo1->Lines->Add("error: radio is not in firmware update mode - turn the radio off, then back on whilst pressing the PTT");
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 	}
@@ -2807,6 +2957,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2836,6 +2990,10 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 
@@ -2867,14 +3025,16 @@ void __fastcall TForm1::WriteFirmwareButtonClick(TObject *Sender)
 	SerialPortComboBoxChange(NULL);
 
 	// *******************************************
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 {
 	String s;
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	// *******************************************
 	// load the configuration file in
@@ -2887,7 +3047,12 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 	const bool ok = OpenDialog1->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	String name = OpenDialog1->FileName;
 	String ext  = ExtractFileExt(name).LowerCase();
@@ -2903,6 +3068,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("No data loaded", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2920,6 +3089,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("File appears to be to small to be an config file", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2930,6 +3103,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 		s.printf("File is to large to be an config file (max 0x%04X)", UVK5_MAX_CONFIG_SIZE);
 		Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -2947,6 +3124,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 					break;
 				case IDNO:
 				case IDCANCEL:
+
+					m_rx_mode = 0;
+					connect(false);
+
 					return;
 			}
 		#else
@@ -2955,6 +3136,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 			s.printf("File is to large to be an config file (max 0x%04X)\n\nUpload cancelled", UVK5_CONFIG_SIZE);
 			Application->MessageBox(s.c_str(), Application->Title.c_str(), MB_ICONERROR | MB_OK);
 			Application->RestoreTopMosts();
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		#endif
 	}
@@ -2964,8 +3149,15 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("");
 
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -2988,6 +3180,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 	if (r < 0)
@@ -2996,6 +3192,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -3031,6 +3231,10 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 
@@ -3061,6 +3265,9 @@ void __fastcall TForm1::WriteConfigButtonClick(TObject *Sender)
 	disconnect();
 
 	SerialPortComboBoxChange(NULL);
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
@@ -3075,21 +3282,27 @@ void __fastcall TForm1::SerialPortComboBoxChange(TObject *Sender)
 	ReadADCButton->Enabled          = enabled;
 	ReadRSSIButton->Enabled         = enabled;
 
-	SerialPortComboBox->Enabled     = !m_serial.port.connected;
-	SerialSpeedComboBox->Enabled    = !m_serial.port.connected;
+//	SerialPortComboBox->Enabled     = !m_serial.port.connected;
+//	SerialSpeedComboBox->Enabled    = !m_serial.port.connected;
 }
 
 void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 {
 	String s;
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	Memo1->Lines->Add("");
 
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -3113,6 +3326,10 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 		Memo1->Lines->Add("radio not detected");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 	if (r < 0)
@@ -3121,6 +3338,10 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 #else
@@ -3135,26 +3356,37 @@ void __fastcall TForm1::ReadADCButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
-
-
 	disconnect();
 	SerialPortComboBoxChange(NULL);
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 {
 	String s;
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	Memo1->Lines->Add("");
 
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -3178,6 +3410,10 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 		Memo1->Lines->Add("radio not detected");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 	if (r < 0)
@@ -3186,6 +3422,10 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 #else
@@ -3200,13 +3440,18 @@ void __fastcall TForm1::ReadRSSIButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		disconnect();
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
-
-
 	disconnect();
 	SerialPortComboBoxChange(NULL);
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
@@ -3218,12 +3463,25 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 	if (SerialPortComboBox->ItemIndex <= 0 || m_serial.port.connected)
 		return;
 
+	{
+		CCriticalSection cs(m_rx_lines_cs);
+		m_rx_lines.resize(0);
+	}
+
 	Memo1->Clear();
 	Memo1->Lines->Add("");
 	Memo1->Update();
 
+#if 0
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -3249,6 +3507,10 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 			Memo1->Lines->Add("");
 			Memo1->Lines->Add("radio not detected");
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 		if (r > 0)
@@ -3257,6 +3519,10 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 			Memo1->Lines->Add("");
 			Memo1->Lines->Add("error: radio is in user mode");
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 	}
@@ -3271,67 +3537,20 @@ void __fastcall TForm1::SerialPortComboBoxSelect(TObject *Sender)
 			Memo1->Lines->Add("radio not detected");
 
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
-/*
-
-
-
-	for (int i = 0; i < 2; i++)
-	{
-		r = k5_hello();
-		if (r != 0)
-			break;
-		Application->ProcessMessages();
-	}
-
-	if (r < 0)
-	{
-		r = k5_wait_flash_message();
-		Memo1->Lines->Add("");
-
-		disconnect();
-
-		Memo1->Lines->Add("");
-		if (r > 0)
-			Memo1->Lines->Add("radio is in firmware update mode");
-		else
-			Memo1->Lines->Add("radio not detected");
-
-		SerialPortComboBoxChange(NULL);
-		return;
-	}
-
-	if (r == 0)
-	{
-		Memo1->Lines->Add("");
-
-		disconnect();
-
-		Memo1->Lines->Add("");
-		Memo1->Lines->Add("radio not detected");
-
-		SerialPortComboBoxChange(NULL);
-		return;
-	}
-
-	if (r > 0)
-	{
-		Memo1->Lines->Add("");
-
-		disconnect();
-
-		Memo1->Lines->Add("");
-		Memo1->Lines->Add("radio is in user mode");
-
-		SerialPortComboBoxChange(NULL);
-		return;
-	}
-*/
 	disconnect();
 
 	SerialPortComboBoxChange(NULL);
+#endif
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::SerialSpeedComboBoxSelect(TObject *Sender)
@@ -3343,8 +3562,7 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 {
 	String  s;
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	// *******************************************
 	// download the radios calibration data
@@ -3353,8 +3571,15 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 	Memo1->Lines->Add("");
 	Memo1->Update();
 
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -3377,6 +3602,10 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 	if (r < 0)
@@ -3385,6 +3614,10 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -3411,6 +3644,10 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 
@@ -3452,7 +3689,12 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 	const bool ok = SaveDialog2->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	String name = SaveDialog2->FileName;
 	String ext  = ExtractFileExt(name).LowerCase();
@@ -3489,6 +3731,9 @@ void __fastcall TForm1::ReadCalibrationButtonClick(TObject *Sender)
 	}
 
 	// *******************************************
+
+	m_rx_mode = 0;
+	connect(false);
 }
 
 void __fastcall TForm1::StatusBar1Resize(TObject *Sender)
@@ -3515,8 +3760,7 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 {
 	String s;
 
-	if (m_serial.port.connected)
-		return;
+	disconnect();
 
 	// *******************************************
 	// load the firmware file in
@@ -3527,7 +3771,12 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 	const bool ok = OpenDialog2->Execute();
 	Application->RestoreTopMosts();
 	if (!ok)
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	String name = OpenDialog2->FileName;
 	String ext  = ExtractFileExt(name).LowerCase();
@@ -3543,6 +3792,10 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("No data loaded", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -3559,6 +3812,10 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 		Application->NormalizeTopMosts();
 		Application->MessageBox("File size is invalid", Application->Title.c_str(), MB_ICONERROR | MB_OK);
 		Application->RestoreTopMosts();
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -3575,8 +3832,15 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 
 	Memo1->Lines->Add("");
 
+	m_rx_mode = 1;
+
 	if (!connect(false))
+	{
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
+	}
 
 	SerialPortComboBoxChange(NULL);
 
@@ -3599,6 +3863,10 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("radio not detected");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 	if (r < 0)
@@ -3607,6 +3875,10 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 		Memo1->Lines->Add("");
 		Memo1->Lines->Add("error: radio is in firmware update mode - turn the radio off, then back on whilst NOT pressing the PTT");
 		SerialPortComboBoxChange(NULL);
+
+		m_rx_mode = 0;
+		connect(false);
+
 		return;
 	}
 
@@ -3644,6 +3916,10 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 			StatusBar1->Update();
 			disconnect();
 			SerialPortComboBoxChange(NULL);
+
+			m_rx_mode = 0;
+			connect(false);
+
 			return;
 		}
 
@@ -3676,5 +3952,8 @@ void __fastcall TForm1::WriteCalibrationButtonClick(TObject *Sender)
 	SerialPortComboBoxChange(NULL);
 
 	// *******************************************
+
+	m_rx_mode = 0;
+	connect(false);
 }
 

@@ -396,7 +396,7 @@ bool CSerialPort::Connect(char *NewDeviceName)
 	}
 
 	#ifdef SERIAL_OVERLAPPED
-		overlapped_Read.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+		overlapped_Read.hEvent  = CreateEvent(NULL, TRUE, FALSE, NULL);
 		overlapped_Write.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 		if (overlapped_Read.hEvent == NULL || overlapped_Write.hEvent == NULL)
 		{
@@ -408,7 +408,18 @@ bool CSerialPort::Connect(char *NewDeviceName)
 		}
 	#endif
 
-	// return true if we are connected OK
+	{
+		const DWORD flags = EV_BREAK | EV_CTS | EV_DSR | EV_ERR | EV_RING | EV_RLSD | EV_RXCHAR | EV_RXFLAG | EV_TXEMPTY;
+		if (!SetCommMask(device_handle, flags))
+		{
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+
+			Disconnect();
+			return false;
+		}
+	}
+
 	return (device_handle != INVALID_HANDLE_VALUE) ? true : false;
 }
 
@@ -843,6 +854,46 @@ bool CSerialPort::GetRLSD()
 
 	return (ModemState & MS_RLSD_ON) ? true : false;
 }
+
+#ifdef SERIAL_OVERLAPPED
+	bool CSerialPort::GetBreak()
+	{
+		if (device_handle == INVALID_HANDLE_VALUE)
+			return false;	// not connected
+
+		DWORD event = 0;
+		if (!WaitCommEvent(device_handle, &event, &overlapped_Read))
+		{
+			LastError = GetLastError();
+//			GetLastErrorStr(LastError, LastErrorStr, sizeof(LastErrorStr));
+			return false;
+		}
+
+		if (event & EV_ERR)
+		{
+			DWORD errors;
+			COMSTAT stat;
+			if (ClearCommError(device_handle, &errors, &stat))
+			{
+				if (errors & CE_BREAK)    return true;
+//				if (errors & CE_FRAME)    return false;
+//				if (errors & CE_OVERRUN)  return false;
+//				if (errors & CE_RXOVER)   return false;
+//				if (errors & CE_RXPARITY) return false;
+			}
+		}
+
+//		return (event & EV_RING)     ? true : false;
+//		return (event & EV_RXCHAR)   ? true : false;
+		return (event & EV_BREAK)    ? true : false;
+//		return (event & EV_CTS)      ? true : false;
+//		return (event & & EV_DSR)    ? true : false;
+//		return (event & & EV_RLSD)   ? true : false;
+//		return (event & & EV_RXCHAR) ? true : false;
+//		return (event & & EV_RXFLAG) ? true : false;
+//		return (event & EV_TXEMPTY)  ? true : false;
+	}
+#endif
 
 int CSerialPort::GetByteSize()
 {

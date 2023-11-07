@@ -42,9 +42,12 @@ object Form1: TForm1
         Width = 100
       end
       item
-        Alignment = taCenter
         Bevel = pbRaised
-        Width = 200
+        Width = 300
+      end
+      item
+        Bevel = pbRaised
+        Width = 50
       end>
     SimplePanel = False
     UseSystemFont = False

@@ -55,6 +55,7 @@
 #define WM_INIT_GUI          (WM_USER + 100)
 #define WM_CONNECT           (WM_USER + 101)
 #define WM_DISCONNECT        (WM_USER + 102)
+#define WM_BREAK             (WM_USER + 103)
 
 #define ARRAY_SIZE(array)    (sizeof(array) / sizeof(array[0]))
 
@@ -338,6 +339,13 @@ private:
 	int                   m_screen_height;
 	SYSTEM_INFO           m_system_info;
 
+	int                   m_breaks;
+
+	int                   m_rx_mode;
+	String                m_rx_str;
+	CCriticalSectionObj   m_rx_lines_cs;
+	std::vector <String>  m_rx_lines;
+
 	CCriticalSectionObj   m_thread_cs;
 	CThread              *m_thread;
 
@@ -417,6 +425,7 @@ private:
 	void __fastcall WMInitGUI(TMessage &msg);
 	void __fastcall WMConnect(TMessage &msg);
 	void __fastcall WMDisconnect(TMessage &msg);
+	void __fastcall WMBreak(TMessage &msg);
 
 protected:
 
@@ -427,10 +436,11 @@ protected:
 		VCL_MESSAGE_HANDLER(CM_MOUSELEAVE, TMessage, CMMouseLeave);
 		VCL_MESSAGE_HANDLER(CM_MOUSEENTER, TMessage, CMMouseEnter);
 
-		VCL_MESSAGE_HANDLER(WM_INIT_GUI, TMessage, WMInitGUI);
+		VCL_MESSAGE_HANDLER(WM_INIT_GUI,   TMessage, WMInitGUI);
 
-		VCL_MESSAGE_HANDLER(WM_CONNECT, TMessage, WMConnect);
+		VCL_MESSAGE_HANDLER(WM_CONNECT,    TMessage, WMConnect);
 		VCL_MESSAGE_HANDLER(WM_DISCONNECT, TMessage, WMDisconnect);
+		VCL_MESSAGE_HANDLER(WM_BREAK,      TMessage, WMBreak);
 
 	END_MESSAGE_MAP(TForm)
 	#pragma option pop
